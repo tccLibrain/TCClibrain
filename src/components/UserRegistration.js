@@ -45,16 +45,10 @@ export function renderUserRegistration(container) {
       <label>Tipo de Usuário:</label>
       <label><input type="radio" name="tipo" value="leitor" checked /> Leitor</label>
       <label><input type="radio" name="tipo" value="admin" /> Administrador</label>
-
-      <label>Situação:</label>
-      <select name="situacao" required>
-        <option value="ativo">Ativo</option>
-        <option value="inativo">Inativo</option>
-        <option value="pendente">Pendente</option>
-      </select>
-
+      <h4> DATA DE NaSCIMENTO </h4>
+ <input type="date" name="data_nascimento" placeholder="Data de Nascimento" required />
       <label>Foto:</label>
-      <input type="file" name="foto" accept="image/*" required />
+      <input type="file" name="foto" accept="image/*"  />
 
       <button type="submit">Continuar</button>
     </form>
@@ -92,7 +86,7 @@ function renderUserRegistrationStep2(container, step1Data) {
       <input type="text" name="cep" placeholder="CEP" required />
       <input type="text" name="cidade" placeholder="Cidade" required />
       <input type="text" name="estado" placeholder="Estado" required />
-      <input type="date" name="data_nascimento" placeholder="Data de Nascimento" required />
+     
 
       <button type="submit">Cadastrar</button>
     </form>
