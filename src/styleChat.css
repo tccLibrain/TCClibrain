@@ -1,0 +1,191 @@
+:root {
+  font-family: 'Arial', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: #333;
+  background-color: #ffffff;
+
+  --roxo: #5e4169;
+  --cinza-claro: #f0f0f0;
+  --cinza-medio: #ccc;
+  --cinza-escuro: #888;
+}
+
+body {
+  margin: 0;
+  background-color: #ffffff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#app {
+  width: 100%;
+  padding-bottom: 70px; /* espaço para rodapé */
+}
+
+a {
+  color: var(--roxo);
+  text-decoration: none;
+}
+a:hover {
+  color: #7c5791;
+}
+
+h1, h2 {
+  color: var(--roxo);
+}
+
+h2 {
+  margin: 1rem;
+  font-size: 1.2rem;
+}
+
+/* Header */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+}
+.perfil {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+.titulo-logo {
+  font-size: 1.5rem;
+  color: var(--roxo);
+  font-weight: bold;
+}
+.menu-btn {
+  font-size: 24px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* Search bar */
+
+.search-bar {
+  display: flex;
+  margin: 0 1rem 1rem;
+  padding: 0.5rem;
+  background: var(--cinza-claro);
+  border-radius: 20px;
+}
+.search-bar input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0.5rem;
+  font-size: 16px;
+}
+.search-bar button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--roxo);
+  cursor: pointer;
+}
+
+/* Livros */
+
+.categoria {
+  margin-bottom: 1rem;
+}
+.livros-grid {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 1rem 1rem;
+}
+.livro-card {
+  min-width: 100px;
+  cursor: pointer;
+}
+.livro-card img {
+  width: 100px;
+  height: 150px;
+  border-radius: 10px;
+}
+
+/* Rodapé */
+
+.footer-nav {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  background: white;
+  display: flex;
+  justify-content: space-around;
+  padding: 0.5rem 0;
+  box-shadow: 0 -1px 5px rgba(0,0,0,0.1);
+}
+.footer-nav button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--roxo);
+  cursor: pointer;
+}
+
+/* Botões padrão */
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1em;
+  font-size: 1em;
+  font-weight: 500;
+  background-color: var(--cinza-claro);
+  cursor: pointer;
+  transition: background-color 0.25s;
+}
+button:hover {
+  background-color: #e2e2e2;
+}
+
+.menu-lateral {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 250px;
+  height: 100vh;
+  background-color: #5e3c6c;
+  color: white;
+  padding: 2rem 1rem;
+  z-index: 1000;
+  transition: transform 0.3s ease;
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.3);
+  transform: translateX(100%); /* <- isso aqui esconde o menu */
+}
+.menu-lateral ul {
+  list-style: none;
+  padding: 0;
+}
+
+.menu-lateral li {
+  margin: 1.5rem 0;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.menu-lateral.show {
+  transform: translateX(0);
+}
+
+
+.overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 900;
+}
+
+.hidden {
+  display: none;
+}

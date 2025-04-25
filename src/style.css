@@ -1,0 +1,22 @@
+body {
+    margin: 0;
+    background-color: #60426b;
+    font-family: arial;
+    font-size: 110%;
+}
+
+.textoGrande1 {
+    font-size: 125%;
+}
+
+.textoGrande2 {
+    font-size: 150%;
+}
+
+.textoGrande3 {
+    font-size: 175%;
+}
+
+.textoGrande4 {
+    font-size: 200%;
+}
