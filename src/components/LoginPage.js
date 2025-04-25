@@ -17,7 +17,7 @@ export function renderLoginPage(container) {
       }
 
       .login {
-        margin-top: 15px;
+        margin-top: 40px;
         color: #fff;
         font-family: arial black;
         font-size: 220%;
@@ -29,6 +29,7 @@ export function renderLoginPage(container) {
       }
 
       #login-form {
+    margin-top: 0px;
     display: flex;
     flex-direction: column;
     gap: 10px; /* Espaço entre os elementos */
@@ -44,7 +45,7 @@ export function renderLoginPage(container) {
     border: none;
     border-radius: 999px;          /* deixa bem oval */
     padding: 12px 20px;
-    font-family: arial;
+    font-family: arial black;
     font-size: 16px;
     text-align: center;
     outline: none;
@@ -55,7 +56,7 @@ export function renderLoginPage(container) {
 
   .input-preenchido {
     background-color: #fff9b0;
-    color: #333;
+    color: #111;
   }
 
   .input-estilizado::placeholder {
@@ -75,7 +76,7 @@ export function renderLoginPage(container) {
     border: none;
     border-radius: 999px;          /* deixa bem oval */
     padding: 12px 20px;
-    font-family: arial;
+    font-family: arial black;
     font-size: 16px;
     text-align: center;
     outline: none;
@@ -103,6 +104,18 @@ export function renderLoginPage(container) {
     font-family: arial black;
     font-size: 80%;
   }
+
+  a:link {
+    color: #fff;
+    background-color: transparent;
+    text-decoration: none;
+  }
+
+  a:visited {
+    color: #fff;
+    background-color: transparent;
+    text-decoration: none;
+  }
     </style>
       <div class='containerLogin centro'>
           <img src="${logo_librain_Transparente}" alt="Logo" height='200px' width='200px'>
@@ -126,7 +139,9 @@ export function renderLoginPage(container) {
   
         <button type="submit">Entrar</button>
       </form>
-        <p class='conta'>Ainda não tem conta?<a href="#" id="go-register">Cadastre-se</a></p>
+      <div class='contaclasse'>
+        <p class='conta'>Ainda não fez cadastro?<a href="#" id="go-register" style='margin-left: 5px;'>Cadastre-se</a></p>
+      </div>
     `;
   
     const form = document.getElementById('login-form');

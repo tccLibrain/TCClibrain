@@ -1,6 +1,44 @@
+import folhaLogin from '../images/folhaLogin.png';
+import logo_librain_Transparente from '../images/logo_librain_Transparente.png';
+
 export function renderUserRegistration(container) {
   container.innerHTML = `
-    <h1>Cadastro - Etapa 1</h1>
+    <style>
+      .containerLogin {
+        background-image: url('${folhaLogin}');
+        repeat: no-repeat;
+        display: flex;
+        width: 100%;
+        height: 280px;
+    }
+      
+      .containerCadastro img {
+        margin-top: 22px;
+    }
+      
+      .cadastro {
+        margin-top: 40px;
+        color: #fff;
+        font-family: arial black;
+        font-size: 220%;
+    }
+      
+      .centro {
+      display: flex;
+      justify-content: center;
+    }
+    </style>
+
+    <div class='containerCadastro centro'>
+        <img src="${logo_librain_Transparente}" alt="Logo" height='200px' width='200px'>
+    </div>
+
+    <!-- cadastro etapa 1 -->
+    <div class ='centro'>
+      <p class='cadastro'>Cadastro</p>
+      </div>
+
+    <h1>Cadastro</h1>
     <form id="registration-step1">
       <input type="text" name="nome" placeholder="Nome" required />
       
