@@ -126,8 +126,7 @@ export function renderLoginPage(container) {
   
         <button type="submit">Entrar</button>
       </form>
-        <p class='conta'>Ainda não tem conta?</p>
-        <a href="#" id="go-register">Cadastre-se aqui</a>
+        <p class='conta'>Ainda não tem conta?<a href="#" id="go-register">Cadastre-se</a></p>
     `;
   
     const form = document.getElementById('login-form');
