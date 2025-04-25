@@ -93,6 +93,16 @@ export function renderLoginPage(container) {
   font-family: arial black;
   color: #fff;
   }
+
+  .conta {
+    display: flex;
+    aling-text: center;
+    justify-content: center;
+    margin-top: 50px;
+    color: #fff;
+    font-family: arial black;
+    font-size: 80%;
+  }
     </style>
       <div class='containerLogin centro'>
           <img src="${logo_librain_Transparente}" alt="Logo" height='200px' width='200px'>
@@ -116,7 +126,7 @@ export function renderLoginPage(container) {
   
         <button type="submit">Entrar</button>
       </form>
-        <p class='textoBacana1' style="margin-top: 20px;">Ainda não tem conta?</p>
+        <p class='conta'>Ainda não tem conta?</p>
         <a href="#" id="go-register">Cadastre-se aqui</a>
     `;
   
