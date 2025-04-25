@@ -4,7 +4,7 @@ import { renderUserRegistration } from './components/UserRegistration.js';
 import { renderAdminPanel } from './components/AdminPanel.js';
 import { renderLoginPage } from './components/LoginPage.js';
 import { renderUserDashboard } from './components/UserDashboard.js';
-
+//git pull
 export function navigateTo(screen, data = {}) {
   const app = document.getElementById('app');
   app.innerHTML = '';
