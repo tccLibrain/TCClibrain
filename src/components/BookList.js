@@ -3,28 +3,50 @@ import { books } from '../data/books.js';
 export function renderBookList(container) {
   const user = JSON.parse(localStorage.getItem('user')) || { nome: 'Visitante' };
 
-  // Agrupar por gênero
-  const livrosPorGenero = {};
-  books.forEach(book => {
-    if (!livrosPorGenero[book.genero]) livrosPorGenero[book.genero] = [];
-    livrosPorGenero[book.genero].push(book);
-  });
+  // Guarda o valor atual da busca
+  let buscaAtual = '';
 
-  // HTML de categorias
-  const categoriasHtml = Object.entries(livrosPorGenero).map(([genero, livros]) => `
-    <section class="categoria">
-      <h2>${genero.toUpperCase()}</h2>
-      <div class="livros-grid">
-        ${livros.map(book => `
-          <div class="livro-card" onclick="navigateTo('details', { bookId: ${book.id} })">
-            <img src="${book.imagem || 'https://via.placeholder.com/100x150'}" alt="${book.title}" />
-          </div>
-        `).join('')}
-      </div>
-    </section>
-  `).join('');
+  // Função para renderizar a lista filtrada
+  function renderLivrosFiltrados(filtro) {
+    // Filtra livros pelo título ou autor, case-insensitive
+    const livrosFiltrados = books.filter(book =>
+      book.title.toLowerCase().includes(filtro.toLowerCase()) ||
+      (book.autor && book.autor.toLowerCase().includes(filtro.toLowerCase()))
+    );
+
+    // Agrupa por gênero
+    const livrosPorGenero = {};
+    livrosFiltrados.forEach(book => {
+      if (!livrosPorGenero[book.genero]) livrosPorGenero[book.genero] = [];
+      livrosPorGenero[book.genero].push(book);
+    });
+
+    // Gera HTML das categorias
+    return Object.entries(livrosPorGenero).map(([genero, livros]) => `
+      <section class="categoria">
+        <h2>${genero.toUpperCase()}</h2>
+        <div class="livros-grid">
+          ${livros.map(book => `
+            <div class="livro-card" onclick="navigateTo('details', { bookId: ${book.id} })">
+              <img src="${book.imagem || 'https://via.placeholder.com/100x150'}" alt="${book.title}" />
+            </div>
+          `).join('')}
+        </div>
+      </section>
+    `).join('');
+  }
 
   container.innerHTML = `
+    <div id="menu-lateral" class="menu-lateral">
+      <ul>
+        <li onclick="navigateTo('dashboard')">Dashboard</li>
+        <li onclick="navigateTo('books')">Livros</li>
+        <li onclick="logout()">Sair</li>
+      </ul>
+    </div>
+
+    <div id="overlay-menu" class="overlay hidden"></div>
+
     <div class="header">
       <img src="${user.foto || 'https://via.placeholder.com/40'}" class="perfil" />
       <h1 class="titulo-logo">LIBRAIN</h1>
@@ -32,52 +54,34 @@ export function renderBookList(container) {
     </div>
 
     <div class="search-bar">
-      <input type="text" placeholder="Buscar livro..." />
-      <button>🔍</button>
+      <input type="text" placeholder="Buscar livro..." id="search-input" />
+      <button id="search-btn">🔍</button>
     </div>
 
-    <div class="categorias-container">
-      ${categoriasHtml}
+    <div class="categorias-container" id="categorias-container">
+      ${renderLivrosFiltrados('')}
     </div>
 
-    <footer class="footer-nav">
-      <button onclick="navigateTo('books')">🏠</button>
-      <button onclick="navigateTo('dashboard')">👤</button>
-      <button onclick="navigateTo('notificacoes')">📚</button>
-    </footer>
-
-    <!-- Menu lateral -->
-    <div id="menu-lateral" class="menu-lateral hidden">
-      <ul>
-        <li onclick="navigateTo('perfil')">👤 Perfil</li>
-        <li onclick="navigateTo('notificacoes')">🔔 Notificações</li>
-        <li onclick="navigateTo('suporte')">🛠 Suporte</li>
-        <li onclick="navigateTo('dashboard')">📚 Estante</li>
-        <li onclick="navigateTo('feedback')">📝 Feedback</li>
-        <li onclick="navigateTo('config')">⚙️ Configurações</li>
-      </ul>
-    </div>
-    <div id="overlay" class="overlay hidden"></div>
+    <footer class="footer-nav"></footer>
   `;
 
-  // Mostrar/esconder menu lateral
-  setTimeout(() => {
-    const menuBtn = document.querySelector('.menu-btn');
-    const menuLateral = document.getElementById('menu-lateral');
-    const overlay = document.getElementById('overlay');
+  // Evento para busca ao clicar no botão
+  const inputBusca = container.querySelector('#search-input');
+  const botaoBusca = container.querySelector('#search-btn');
+  const containerCategorias = container.querySelector('#categorias-container');
 
-    menuBtn?.addEventListener('click', () => {
-      menuLateral.classList.add('show');
-      overlay.classList.add('show');
-      menuLateral.classList.remove('hidden');
-      overlay.classList.remove('hidden');
-    });
+  function atualizarBusca() {
+    const texto = inputBusca.value.trim();
+    containerCategorias.innerHTML = renderLivrosFiltrados(texto);
+  }
 
-    overlay?.addEventListener('click', () => {
-      menuLateral.classList.remove('show');
-      overlay.classList.remove('show');
-      menuLateral.classList.add('hidden');
-      overlay.classList.add('hidden');
-    });
-  }, 0);
+  botaoBusca.onclick = atualizarBusca;
+
+  // Também pode buscar ao digitar Enter na input
+  inputBusca.addEventListener('keyup', (e) => {
+    if (e.key === 'Enter') atualizarBusca();
+  });
+
+  // Ativa o menu lateral
+  setupMenuToggle();
 }
