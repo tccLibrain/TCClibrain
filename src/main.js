@@ -16,7 +16,8 @@ window.navigateTo = (screen, data = {}) => {
       renderLoginPage(app);
       break;
     case 'books':
-      renderBookList(app);
+     renderBookList(app);
+      setupMenuToggle();
       break;
     case 'details':
       renderBookDetails(app, data.bookId);
@@ -34,7 +35,7 @@ window.navigateTo = (screen, data = {}) => {
       renderLoginPage(app);
   }
 
-  setupMenuToggle(); // Garante que o menu funcione após renderizar nova tela
+  setupMenuToggle(); // Ativa o botão do menu lateral após renderizar
 };
 
 // Função global de logout
@@ -43,7 +44,17 @@ window.logout = () => {
   navigateTo('login');
 };
 
-// Lógica do menu lateral
+// Fecha o menu lateral e o overlay
+window.closeMenu = () => {
+  const menuLateral = document.getElementById('menu-lateral');
+  const overlay = document.getElementById('overlay-menu');
+  if (menuLateral && overlay) {
+    menuLateral.classList.remove('show');
+    overlay.classList.add('hidden');
+  }
+};
+
+// Ativa o botão do menu lateral (☰)
 function setupMenuToggle() {
   const menuBtn = document.querySelector('.menu-btn');
   const menuLateral = document.getElementById('menu-lateral');
@@ -55,17 +66,19 @@ function setupMenuToggle() {
       overlay.classList.remove('hidden');
     };
 
-    overlay.onclick = () => {
-      menuLateral.classList.remove('show');
-      overlay.classList.add('hidden');
-    };
+    overlay.onclick = window.closeMenu;
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        window.closeMenu();
+      }
+    });
   }
 }
 
-// Inicialização
+// Inicialização do app
 function init() {
-  renderLoginPage(app); // Abre tela de login
-  setupMenuToggle(); // Ativa o menu lateral inicialmente
+  navigateTo('login'); // Começa na tela de login
 }
 
 init();
