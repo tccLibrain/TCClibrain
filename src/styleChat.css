@@ -12,33 +12,47 @@
   --cinza-escuro: #888;
 }
 
+/* Corpo e estrutura */
+
 body {
   margin: 0;
-  background-color: #ffffff;
+  background-color: var(--branco, #ffffff);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--cinza-escuro);
 }
 
 #app {
   width: 100%;
-  padding-bottom: 70px; /* espaço para rodapé */
+  padding-bottom: 70px; /* espaço para rodapé fixo */
 }
+
+/* Links */
 
 a {
   color: var(--roxo);
   text-decoration: none;
+  transition: color 0.3s ease;
 }
-a:hover {
+a:hover,
+a:focus {
   color: #7c5791;
+  outline: none;
+  text-decoration: underline;
 }
+
+/* Títulos */
 
 h1, h2 {
   color: var(--roxo);
+  margin: 0;
 }
 
 h2 {
-  margin: 1rem;
+  margin: 1rem 0 1rem 1rem;
   font-size: 1.2rem;
 }
 
@@ -49,22 +63,31 @@ h2 {
   align-items: center;
   justify-content: space-between;
   padding: 1rem;
+  background-color: var(--cinza-claro);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
+
 .perfil {
   width: 40px;
   height: 40px;
   border-radius: 50%;
+  object-fit: cover;
 }
+
 .titulo-logo {
   font-size: 1.5rem;
   color: var(--roxo);
   font-weight: bold;
 }
+
 .menu-btn {
   font-size: 24px;
   background: none;
   border: none;
   cursor: pointer;
+  color: var(--roxo);
+  padding: 0;
+  line-height: 1;
 }
 
 /* Search bar */
@@ -72,10 +95,11 @@ h2 {
 .search-bar {
   display: flex;
   margin: 0 1rem 1rem;
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
   background: var(--cinza-claro);
   border-radius: 20px;
 }
+
 .search-bar input {
   flex: 1;
   border: none;
@@ -83,12 +107,19 @@ h2 {
   padding: 0.5rem;
   font-size: 16px;
 }
+
+.search-bar input:focus {
+  outline: 2px solid var(--roxo);
+  outline-offset: 2px;
+}
+
 .search-bar button {
   background: none;
   border: none;
   font-size: 20px;
   color: var(--roxo);
   cursor: pointer;
+  padding-left: 0.5rem;
 }
 
 /* Livros */
@@ -96,19 +127,44 @@ h2 {
 .categoria {
   margin-bottom: 1rem;
 }
+
 .livros-grid {
   display: flex;
   gap: 10px;
   overflow-x: auto;
   padding: 0 1rem 1rem;
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--roxo) var(--cinza-claro);
 }
+.livros-grid::-webkit-scrollbar {
+  height: 8px;
+}
+.livros-grid::-webkit-scrollbar-thumb {
+  background-color: var(--roxo);
+  border-radius: 4px;
+}
+
 .livro-card {
   min-width: 100px;
   cursor: pointer;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+
+.livro-card:hover,
+.livro-card:focus {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  outline: none;
+}
+
 .livro-card img {
   width: 100px;
   height: 150px;
+  object-fit: cover;
+  display: block;
   border-radius: 10px;
 }
 
@@ -118,18 +174,27 @@ h2 {
   position: fixed;
   bottom: 0;
   width: 100%;
-  background: white;
+  background: var(--branco, #ffffff);
   display: flex;
   justify-content: space-around;
   padding: 0.5rem 0;
   box-shadow: 0 -1px 5px rgba(0,0,0,0.1);
+  z-index: 100;
 }
+
 .footer-nav button {
   background: none;
   border: none;
   font-size: 24px;
   color: var(--roxo);
   cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.footer-nav button:hover,
+.footer-nav button:focus {
+  color: #7c5791;
+  outline: none;
 }
 
 /* Botões padrão */
@@ -142,11 +207,16 @@ button {
   font-weight: 500;
   background-color: var(--cinza-claro);
   cursor: pointer;
-  transition: background-color 0.25s;
+  transition: background-color 0.25s ease;
 }
-button:hover {
+
+button:hover,
+button:focus {
   background-color: #e2e2e2;
+  outline: none;
 }
+
+/* Menu lateral */
 
 .menu-lateral {
   position: fixed;
@@ -154,29 +224,43 @@ button:hover {
   right: 0;
   width: 250px;
   height: 100vh;
-  background-color: #5e3c6c;
+  background-color: var(--roxo);
   color: white;
   padding: 2rem 1rem;
   z-index: 1000;
   transition: transform 0.3s ease;
   box-shadow: -2px 0 5px rgba(0, 0, 0, 0.3);
-  transform: translateX(100%); /* <- isso aqui esconde o menu */
+  transform: translateX(100%);
+  display: flex;
+  flex-direction: column;
 }
+
 .menu-lateral ul {
   list-style: none;
   padding: 0;
+  margin: 0;
+  flex-grow: 1;
 }
 
 .menu-lateral li {
   margin: 1.5rem 0;
   font-size: 1.2rem;
   cursor: pointer;
+  user-select: none;
+  transition: color 0.3s ease;
+}
+
+.menu-lateral li:hover,
+.menu-lateral li:focus {
+  color: #d6bfd6;
+  outline: none;
 }
 
 .menu-lateral.show {
   transform: translateX(0);
 }
 
+/* Overlay */
 
 .overlay {
   position: fixed;

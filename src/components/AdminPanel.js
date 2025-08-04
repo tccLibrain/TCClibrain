@@ -1,6 +1,7 @@
 import { books } from '../data/books.js';
 import { aprovarDevolucao } from '../utils/devolucao.js';
 
+
 export function renderAdminPanel(container) {
   const user = JSON.parse(localStorage.getItem('user'));
   if (!user || user.tipo !== 'admin') {
@@ -10,14 +11,48 @@ export function renderAdminPanel(container) {
 
   let livros = JSON.parse(localStorage.getItem('books')) || [...books];
 
-  const form = document.createElement('form');
-  form.innerHTML = `
+  container.innerHTML = `
+    <h1>Painel do Administrador</h1>
+
     <h2>Cadastrar Novo Livro</h2>
-    <input type="text" id="title" placeholder="Título" required />
-    <input type="text" id="author" placeholder="Autor" required />
-    <button type="submit">Cadastrar</button>
+    <form id="form-cadastrar-livro">
+      <input type="text" id="title" placeholder="Título" required />
+      <input type="text" id="author" placeholder="Autor" required />
+      <button type="submit">Cadastrar</button>
+    </form>
+
+    <h2>Livros Cadastrados</h2>
+    <div id="lista-livros">
+      ${livros.map(book => `
+        <div style="border: 1px solid #ccc; margin-bottom: 10px; padding: 8px;">
+          <strong>${book.title}</strong> - ${book.author} <br />
+          Status: ${book.available ? 'Disponível' : 'Emprestado até ' + book.returnDate}
+        </div>
+      `).join('')}
+    </div>
+
+    <h2>📥 Devoluções Pendentes</h2>
+    <ul id="lista-devolucoes">
+      ${
+        (JSON.parse(localStorage.getItem('devolucoesPendentes')) || []).map((d, index) => {
+          const livro = livros.find(b => b.id === d.bookId);
+          const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+          const leitor = usuarios.find(u => u.cpf === d.cpf);
+          return `
+            <li>
+              <strong>${livro?.title || 'Livro'}</strong> - solicitado por ${leitor?.nome || d.cpf}
+              <button data-index="${index}" class="btn-aprovar">Aprovar</button>
+            </li>
+          `;
+        }).join('') || '<li>Nenhuma devolução pendente.</li>'
+      }
+    </ul>
+
+    <button id="logout" style="margin-top: 20px;">Sair</button>
   `;
 
+  // Evento do formulário
+  const form = container.querySelector('#form-cadastrar-livro');
   form.onsubmit = (e) => {
     e.preventDefault();
     const title = form.querySelector('#title').value.trim();
@@ -29,7 +64,7 @@ export function renderAdminPanel(container) {
     }
 
     const newBook = {
-      id: livros.length + 1,
+      id: Date.now(),
       title,
       author,
       available: true,
@@ -44,51 +79,21 @@ export function renderAdminPanel(container) {
     renderAdminPanel(container);
   };
 
-  const bookList = livros.map(book => `
-    <div style="border: 1px solid #ccc; margin-bottom: 10px; padding: 8px;">
-      <strong>${book.title}</strong> - ${book.author} <br />
-      Status: ${book.available ? 'Disponível' : 'Emprestado até ' + book.returnDate}
-    </div>
-  `).join('');
+  // Evento para aprovar devoluções
+  container.querySelectorAll('.btn-aprovar').forEach(button => {
+    button.onclick = () => {
+      const index = button.getAttribute('data-index');
+      aprovarDevolucao(Number(index));
+      renderAdminPanel(container);
+    };
+  });
 
-  // DEVOLUÇÕES PENDENTES
-  const devolucoesPendentes = JSON.parse(localStorage.getItem('devolucoesPendentes')) || [];
-  const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-
-  const devolucoesHtml = devolucoesPendentes.length
-    ? devolucoesPendentes.map((d, index) => {
-        const livro = livros.find(b => b.id === d.bookId);
-        const leitor = usuarios.find(u => u.cpf === d.cpf);
-        return `
-          <li>
-            <strong>${livro?.title || 'Livro'}</strong> - solicitado por ${leitor?.nome || d.cpf}
-            <button onclick="aprovarDevolucao(${index})">Aprovar</button>
-          </li>
-        `;
-      }).join('')
-    : '<li>Nenhuma devolução pendente.</li>';
-
-  const logoutButton = document.createElement('button');
-  logoutButton.textContent = 'Sair';
-  logoutButton.style.marginTop = '20px';
-  logoutButton.onclick = () => {
+  // Evento logout
+  container.querySelector('#logout').onclick = () => {
     localStorage.removeItem('user');
     navigateTo('login');
   };
-
-  container.innerHTML = `
-    <h1>Painel do Administrador</h1>
-    ${form.outerHTML}
-
-    <h2>Livros Cadastrados</h2>
-    <div>${bookList}</div>
-
-    <h2>📥 Devoluções Pendentes</h2>
-    <ul>${devolucoesHtml}</ul>
-  `;
-
-  container.appendChild(logoutButton);
 }
 
-// Torna função global para ser chamada nos botões
+// Torna função global para ser chamada externamente se precisar
 window.aprovarDevolucao = aprovarDevolucao;

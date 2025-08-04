@@ -9,27 +9,35 @@ export function renderUserDashboard(container) {
     return;
   }
 
+  // Obtém dados do localStorage
   const emprestimos = JSON.parse(localStorage.getItem('emprestimos')) || [];
   const reservas = JSON.parse(localStorage.getItem('reservas')) || [];
+  const books = JSON.parse(localStorage.getItem('books')) || [];
 
+  // Filtra dados do usuário logado
   const meusEmprestimos = emprestimos.filter(e => e.cpf === user.cpf);
   const minhasReservas = reservas.filter(r => r.cpf === user.cpf);
 
+  // Gera HTML dos empréstimos usando bookId para buscar dados
   const emprestimosHtml = meusEmprestimos.length
     ? meusEmprestimos.map(e => {
-        const books = JSON.parse(localStorage.getItem('books')) || [];
-        const book = books.find(b => b.title === e.titulo);
-        const bookId = book?.id || null;
+        // Busca livro pelo id para garantir dados consistentes
+        const book = books.find(b => b.id === e.bookId);
+
+        const titulo = book ? book.title : e.titulo || 'Livro';
+        const prazo = e.prazo || 'Indefinido';
+        const bookId = book ? book.id : null;
 
         return `
           <li>
-            <strong>${e.titulo}</strong> - até <em>${e.prazo}</em>
+            <strong>${titulo}</strong> - até <em>${prazo}</em>
             ${bookId !== null ? `<button onclick="devolverLivro(${bookId}, '${user.cpf}')">Devolver</button>` : ''}
           </li>
         `;
       }).join('')
     : '<li>Nenhum empréstimo.</li>';
 
+  // Gera HTML das reservas normalmente
   const reservasHtml = minhasReservas.length
     ? minhasReservas.map(r => `<li><strong>${r.titulo}</strong> - posição <em>${r.posicao}</em></li>`).join('')
     : '<li>Não está em nenhuma fila.</li>';
@@ -50,5 +58,12 @@ export function renderUserDashboard(container) {
   `;
 }
 
-// Garante que a função de devolução esteja disponível globalmente
+// Exponha as funções globais necessárias
 window.devolverLivro = devolverLivro;
+// Caso logout e navigateTo não estejam globais, faça o mesmo:
+window.navigateTo = navigateTo;
+// Supondo que exista função logout em outro arquivo, importe e exponha:
+window.logout = () => {
+  localStorage.removeItem('user');
+  navigateTo('login');
+};

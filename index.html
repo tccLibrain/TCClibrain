@@ -2,13 +2,24 @@
 <html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" /> <!-- melhor compatibilidade -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="src/style.css">
-    <title>Vite App</title>
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="stylesheet" href="/src/style.css" /> <!-- melhor usar caminho absoluto com / -->
+    <title>Librain - Biblioteca Virtual</title> <!-- título mais descritivo -->
   </head>
   <body>
     <div id="app"></div>
+<div id="menu-wrapper" class="hidden">
+  <nav id="menu-lateral">
+    <a href="#" data-target="dashboard">Dashboard</a>
+    <a href="#" data-target="books">Livros</a>
+    <a href="#" id="logout">Sair</a>
+  </nav>
+</div>
+<div id="overlay-menu" class="hidden"></div>
+
+<button class="menu-btn">☰</button>
 
     <script type="module" src="/src/main.js"></script>
   </body>
