@@ -1,6 +1,7 @@
 import folhaLogin from '../images/folhaLogin.png';
-import logo_librain_Transparente from '../images/logo_librain_Transparente.png';
+import logo_librain_T from '../images/logo_librain_T.png';
 import IMask from 'imask';
+import { navigateTo } from '../router.js';
 
 // Validação oficial do CPF
 function validarCPF(cpf) {
@@ -32,7 +33,7 @@ function validarTelefone(numero) {
 export function renderUserRegistration(container) {
   container.innerHTML = `
     <style>
-      .containerLogin {
+      .containerCadastro {
         background-image: url('${folhaLogin}');
         background-repeat: no-repeat;
         display: flex;
@@ -52,51 +53,84 @@ export function renderUserRegistration(container) {
         display: flex;
         justify-content: center;
       }
-      form {
-        max-width: 400px;
-        margin: 0 auto;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        color: #fff;
-        font-family: Arial, sans-serif;
-      }
-      label {
-        font-weight: bold;
-      }
-      input, select {
-        padding: 8px;
-        border-radius: 8px;
-        border: none;
-        font-size: 1rem;
-      }
+
       .error-message {
         color: #ff6b6b;
         font-size: 0.9rem;
         margin-top: -8px;
         margin-bottom: 8px;
       }
-      #foto-preview {
-        max-width: 150px;
-        max-height: 150px;
-        margin-top: 8px;
-        border-radius: 8px;
-        object-fit: cover;
+
+      #registration-step1 {
+        margin-top: 0px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+        max-width: 300px;
+        margin: auto;
       }
-      button {
-        background-color: #ab84a2;
-        color: white;
+
+      #registration-step1 input[type="text"],
+      #registration-step1 input[type="date"] {
+        background-color: #CFD2DB; /* meio cinza meio azul */
+        color: #434E70; /* azul escuro */
         border: none;
         border-radius: 999px;
         padding: 12px 20px;
         font-family: arial black;
         font-size: 16px;
-        cursor: pointer;
+        text-align: center;
+        outline: none;
+        margin-bottom: 10px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .input-preenchido {
+        background-color: #434E70;
+        color: #111;
+      }
+
+      .input-estilizado::placeholder {
+        color: #5e3366;
+        opacity: 0.7;
+      }
+
+      #registration-step1 label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      #registration-step1 button {
+        background-color: #9bb4ff; /* azul claro */
+        color: #fff; 
+        border: none;
+        border-radius: 999px;
+        padding: 12px 20px;
+        font-family: arial black;
+        font-size: 16px;
+        text-align: center;
+        outline: none;
+        margin-bottom: 10px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .conta {
+        display: flex;
+        text-align: center;
+        justify-content: center;
+        margin-top: 50px;
+        color: #fff;
+        font-family: arial black;
+        font-size: 80%;
       }
     </style>
 
     <div class='containerCadastro centro'>
-      <img src="${logo_librain_Transparente}" alt="Logo" height='200px' width='200px'>
+      <img src="${logo_librain_T}" alt="Logo" height='200px' width='200px'>
     </div>
 
     <div class='centro'>
@@ -104,27 +138,31 @@ export function renderUserRegistration(container) {
     </div>
 
     <form id="registration-step1" novalidate>
-      <label for="nome">Nome</label>
-      <input id="nome" type="text" name="nome" placeholder="Nome completo" required />
+      <input id="nome" type="text" name="nome" placeholder="Nome Completo" required />
       <div id="error-nome" class="error-message"></div>
 
-      <label for="cpf">CPF</label>
-      <input id="cpf" type="text" name="cpf" placeholder="000.000.000-00" required />
+      <input id="cpf" type="text" name="cpf" placeholder="CPF" required />
       <div id="error-cpf" class="error-message"></div>
 
-      <label for="data_nascimento">Data de Nascimento</label>
       <input id="data_nascimento" type="date" name="data_nascimento" required />
       <div id="error-data_nascimento" class="error-message"></div>
-
-      <label for="foto">Foto</label>
-      <input id="foto" type="file" name="foto" accept="image/*" />
-      <img id="foto-preview" src="" alt="Prévia da Foto" style="display:none;" />
 
       <button type="submit">Continuar</button>
     </form>
 
-    <button onclick="navigateTo('login')">Voltar ao Login</button>
+    <div class='contaclasse'>
+        <p class='conta'>Já possui uma conta?<a href="#" id="go-login" style='margin-left: 5px; color: #9bb4ff;'>Entre</a></p>
+      </div>
   `;
+
+  // Clique em "Já possui uma conta? Entre"
+  const linkLogin = document.getElementById('go-login');
+  if (linkLogin) {
+    linkLogin.addEventListener('click', (e) => {
+      e.preventDefault();
+      navigateTo('login');
+    });
+  }
 
   // Aplica máscara CPF
   IMask(document.getElementById('cpf'), {
@@ -132,24 +170,6 @@ export function renderUserRegistration(container) {
   });
 
   const formStep1 = document.getElementById('registration-step1');
-  const fotoInput = document.getElementById('foto');
-  const fotoPreview = document.getElementById('foto-preview');
-
-  // Preview da foto
-  fotoInput.onchange = () => {
-    const file = fotoInput.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        fotoPreview.src = e.target.result;
-        fotoPreview.style.display = 'block';
-      };
-      reader.readAsDataURL(file);
-    } else {
-      fotoPreview.style.display = 'none';
-      fotoPreview.src = '';
-    }
-  };
 
   formStep1.onsubmit = (e) => {
     e.preventDefault();
@@ -161,7 +181,7 @@ export function renderUserRegistration(container) {
 
     const nome = document.getElementById('nome').value.trim();
     let cpf = document.getElementById('cpf').value.trim();
-    cpf = cpf.replace(/[^\d]+/g, ''); // Remove máscara para validar
+    cpf = cpf.replace(/[^\d]+/g, '');
     const data_nascimento = document.getElementById('data_nascimento').value.trim();
 
     let hasError = false;
@@ -190,23 +210,8 @@ export function renderUserRegistration(container) {
 
     if (hasError) return;
 
-    function getFotoBase64() {
-      return new Promise((resolve) => {
-        const file = fotoInput.files[0];
-        if (!file) {
-          resolve('');
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
-    }
-
-    getFotoBase64().then((fotoBase64) => {
-      const step1Data = { nome, cpf, data_nascimento, foto: fotoBase64, tipo: 'leitor' };
-      renderUserRegistrationStep2(container, step1Data);
-    });
+    // Se passou em todas as validações → chama etapa 2
+    renderUserRegistrationStep2(container, { nome, cpf, data_nascimento });
   };
 }
 
@@ -246,6 +251,19 @@ function renderUserRegistrationStep2(container, step1Data) {
         font-family: arial black;
         font-size: 16px;
         cursor: pointer;
+      }
+      #btn-voltar {
+        background-color: #9bb4ff;
+        margin-top: 10px;
+      }
+      .conta {
+        display: flex;
+        text-align: center;
+        justify-content: center;
+        margin-top: 50px;
+        color: #fff;
+        font-family: arial black;
+        font-size: 80%;
       }
     </style>
 
@@ -299,21 +317,28 @@ function renderUserRegistrationStep2(container, step1Data) {
       <input id="estado" type="text" name="estado" placeholder="Estado" required />
       <div id="error-estado" class="error-message"></div>
 
-      <button type="submit">Cadastrar</button>
+      <button type="submit">Finalizar Cadastro</button>
+      <button type="button" id="btn-voltar">Voltar</button>
     </form>
-    <button type="button" id="btn-voltar">Voltar</button>
+    
+    <div class='contaclasse'>
+      <p class='conta'>Já possui uma conta?<a href="#" id="go-login" style='margin-left: 5px; color: #9bb4ff;'>Entre</a></p>
+    </div>
   `;
 
-  // Máscaras para telefone e CEP
-  IMask(document.getElementById('tel_residencial'), {
-    mask: '(00) 00000-0000'
-  });
-  IMask(document.getElementById('tel_comercial'), {
-    mask: '(00) 00000-0000'
-  });
-  IMask(document.getElementById('cep'), {
-    mask: '00000-000'
-  });
+  // Clique em "Já possui uma conta? Entre"
+  const linkLogin = document.getElementById('go-login');
+  if (linkLogin) {
+    linkLogin.addEventListener('click', (e) => {
+      e.preventDefault();
+      navigateTo('login');
+    });
+  }
+
+  // Máscaras
+  IMask(document.getElementById('tel_residencial'), { mask: '(00) 00000-0000' });
+  IMask(document.getElementById('tel_comercial'), { mask: '(00) 00000-0000' });
+  IMask(document.getElementById('cep'), { mask: '00000-000' });
 
   const formStep2 = document.getElementById('registration-step2');
   const btnVoltar = document.getElementById('btn-voltar');

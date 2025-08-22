@@ -1,5 +1,6 @@
 import folhaLogin from '../images/folhaLogin.png';
-import logo_librain_Transparente from '../images/logo_librain_Transparente.png';
+import logo_librain_T from '../images/logo_librain_T.png';
+import { navigateTo } from '../router.js';
 
 export function renderLoginPage(container) {
   // Garante que o admin e o user fixos existam
@@ -30,6 +31,13 @@ export function renderLoginPage(container) {
   // Renderiza a interface
   container.innerHTML = `
       <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #434E70;
+      }
+
       .containerLogin {
         background-image: url('${folhaLogin}');
         background-repeat: no-repeat;
@@ -66,8 +74,8 @@ export function renderLoginPage(container) {
 
       #login-form input[type="text"],
       #login-form input[type="password"] {
-        background-color: #fff9b0; /* amarelo claro */
-        color: #5e3366; /* roxo escuro */
+        background-color: #CFD2DB; /* meio cinza meio azul */
+        color: #434E70; /* azul escuro */
         border: none;
         border-radius: 999px;
         padding: 12px 20px;
@@ -81,7 +89,7 @@ export function renderLoginPage(container) {
       }
 
       .input-preenchido {
-        background-color: #fff9b0;
+        background-color: #434E70;
         color: #111;
       }
 
@@ -94,11 +102,12 @@ export function renderLoginPage(container) {
         display: flex;
         align-items: center;
         gap: 5px;
+        color: #fff;
       }
 
       #login-form button {
-        background-color: #ab84a2; /* amarelo claro */
-        color: #fff; /* roxo escuro */
+        background-color: #9bb4ff; /* azul claro */
+        color: #fff; /* texto branco */
         border: none;
         border-radius: 999px;
         padding: 12px 20px;
@@ -130,13 +139,7 @@ export function renderLoginPage(container) {
         font-size: 80%;
       }
 
-      a:link {
-        color: #fff;
-        background-color: transparent;
-        text-decoration: none;
-      }
-
-      a:visited {
+      a:link, a:visited {
         color: #fff;
         background-color: transparent;
         text-decoration: none;
@@ -144,7 +147,7 @@ export function renderLoginPage(container) {
       </style>
 
       <div class='containerLogin centro'>
-        <img src="${logo_librain_Transparente}" alt="Logo" height='200px' width='200px'>
+        <img src="${logo_librain_T}" alt="Logo" height='200px' width='200px'>
       </div>
 
       <div class='centro'>
@@ -152,8 +155,11 @@ export function renderLoginPage(container) {
       </div>
 
       <form id="login-form">
-        <input type="text" name="nome" placeholder="Seu nome" required />
-        <input type="text" name="cpf" placeholder="Seu CPF" required />
+        <input type="text" name="nome" placeholder="Nome Completo" required />
+        <div id="error-nome" class="error-message"></div>
+
+        <input type="text" name="cpf" placeholder="CPF" required />
+        <div id="error-cpf" class="error-message"></div>
         
         <label>
           <input type="radio" name="tipo" value="leitor" checked />
@@ -168,7 +174,7 @@ export function renderLoginPage(container) {
       </form>
 
       <div class='contaclasse'>
-        <p class='conta'>Ainda não fez cadastro?<a href="#" id="go-register" style='margin-left: 5px;'>Cadastre-se</a></p>
+        <p class='conta'>Ainda não fez cadastro?<a href="#" id="go-register" style='margin-left: 5px; color: #9bb4ff;'>Cadastre-se</a></p>
       </div>
   `;
 
@@ -195,13 +201,12 @@ export function renderLoginPage(container) {
 
     localStorage.setItem('user', JSON.stringify(user));
     alert(`Bem-vindo(a), ${nome}!`);
-    window.navigateTo(user.tipo === 'admin' ? 'admin' : 'books');
+    navigateTo(user.tipo === 'admin' ? 'admin' : 'books'); // CORRIGIDO
   };
 
-  // Link para cadastro
   const registerLink = document.getElementById('go-register');
   registerLink.onclick = (e) => {
     e.preventDefault();
-    window.navigateTo('register');
+    navigateTo('register'); 
   };
 }

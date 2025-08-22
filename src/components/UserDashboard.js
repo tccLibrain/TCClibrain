@@ -1,11 +1,10 @@
-import { navigateTo } from '../router.js';
 import { devolverLivro } from '../utils/devolucao.js';
 
 export function renderUserDashboard(container) {
   const user = JSON.parse(localStorage.getItem('user'));
   if (!user) {
     alert('Usuário não encontrado. Faça login novamente.');
-    navigateTo('login');
+    window.navigateTo('login');
     return;
   }
 
@@ -18,12 +17,10 @@ export function renderUserDashboard(container) {
   const meusEmprestimos = emprestimos.filter(e => e.cpf === user.cpf);
   const minhasReservas = reservas.filter(r => r.cpf === user.cpf);
 
-  // Gera HTML dos empréstimos usando bookId para buscar dados
+  // Gera HTML dos empréstimos
   const emprestimosHtml = meusEmprestimos.length
     ? meusEmprestimos.map(e => {
-        // Busca livro pelo id para garantir dados consistentes
         const book = books.find(b => b.id === e.bookId);
-
         const titulo = book ? book.title : e.titulo || 'Livro';
         const prazo = e.prazo || 'Indefinido';
         const bookId = book ? book.id : null;
@@ -37,7 +34,7 @@ export function renderUserDashboard(container) {
       }).join('')
     : '<li>Nenhum empréstimo.</li>';
 
-  // Gera HTML das reservas normalmente
+  // Gera HTML das reservas
   const reservasHtml = minhasReservas.length
     ? minhasReservas.map(r => `<li><strong>${r.titulo}</strong> - posição <em>${r.posicao}</em></li>`).join('')
     : '<li>Não está em nenhuma fila.</li>';
@@ -58,12 +55,9 @@ export function renderUserDashboard(container) {
   `;
 }
 
-// Exponha as funções globais necessárias
+// Torna funções globais acessíveis
 window.devolverLivro = devolverLivro;
-// Caso logout e navigateTo não estejam globais, faça o mesmo:
-window.navigateTo = navigateTo;
-// Supondo que exista função logout em outro arquivo, importe e exponha:
 window.logout = () => {
   localStorage.removeItem('user');
-  navigateTo('login');
+  window.navigateTo('login');
 };

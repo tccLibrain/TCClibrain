@@ -1,25 +1,22 @@
 export const books = [
-  {
-    id: 1,
-    title: 'O Senhor dos Anéis',
-    author: 'J.R.R. Tolkien',
-    synopsis: 'Uma jornada épica pela Terra Média para destruir o Um Anel.',
-    available: true,
-    returnDate: null,
-    reviews: [
-      { user: 'Maria', rating: 5, comment: 'Obra-prima!' },
-      { user: 'João', rating: 4, comment: 'Muito bom, mas longo.' }
-    ],
-    queue: []
-  },
-  {
-    id: 2,
-    title: 'Dom Casmurro',
-    author: 'Machado de Assis',
-    synopsis: 'Bentinho narra sua história com Capitu, marcada por dúvidas e ciúmes.',
-    available: false,
-    returnDate: '2025-04-10',
-    reviews: [],
-    queue: ['12345678900'] // CPF do próximo na fila
-  }
+  { id: 1, title: "Dom Casmurro", author: "Machado de Assis", cover: "https://covers.openlibrary.org/b/id/8231996-L.jpg", available: true },
+  { id: 2, title: "O Senhor dos Anéis", author: "J.R.R. Tolkien", cover: "https://covers.openlibrary.org/b/id/9641651-L.jpg", available: true },
+  { id: 3, title: "Harry Potter e a Pedra Filosofal", author: "J.K. Rowling", cover: "https://covers.openlibrary.org/b/id/7984916-L.jpg", available: true },
+  { id: 4, title: "1984", author: "George Orwell", cover: "https://covers.openlibrary.org/b/id/7222246-L.jpg", available: true },
+  { id: 5, title: "O Pequeno Príncipe", author: "Antoine de Saint-Exupéry", cover: "https://covers.openlibrary.org/b/id/10958369-L.jpg", available: true },
+  { id: 6, title: "A Revolução dos Bichos", author: "George Orwell", cover: "https://covers.openlibrary.org/b/id/153541-L.jpg", available: true },
+  { id: 7, title: "Orgulho e Preconceito", author: "Jane Austen", cover: "https://covers.openlibrary.org/b/id/8235116-L.jpg", available: true },
+  { id: 8, title: "O Hobbit", author: "J.R.R. Tolkien", cover: "https://covers.openlibrary.org/b/id/6979861-L.jpg", available: true },
+  { id: 9, title: "Moby Dick", author: "Herman Melville", cover: "https://covers.openlibrary.org/b/id/7222276-L.jpg", available: true },
+  { id: 10, title: "O Nome da Rosa", author: "Umberto Eco", cover: "https://covers.openlibrary.org/b/id/9251996-L.jpg", available: true },
+  { id: 11, title: "Cem Anos de Solidão", author: "Gabriel García Márquez", cover: "https://covers.openlibrary.org/b/id/9253634-L.jpg", available: true },
+  { id: 12, title: "A Menina que Roubava Livros", author: "Markus Zusak", cover: "https://covers.openlibrary.org/b/id/8232002-L.jpg", available: true },
+  { id: 13, title: "It: A Coisa", author: "Stephen King", cover: "https://covers.openlibrary.org/b/id/9254649-L.jpg", available: true },
+  { id: 14, title: "O Código Da Vinci", author: "Dan Brown", cover: "https://covers.openlibrary.org/b/id/8226196-L.jpg", available: true },
+  { id: 15, title: "Jogos Vorazes", author: "Suzanne Collins", cover: "https://covers.openlibrary.org/b/id/8232441-L.jpg", available: true },
+  { id: 16, title: "Percy Jackson e o Ladrão de Raios", author: "Rick Riordan", cover: "https://covers.openlibrary.org/b/id/8233651-L.jpg", available: true },
+  { id: 17, title: "A Culpa é das Estrelas", author: "John Green", cover: "https://covers.openlibrary.org/b/id/8235331-L.jpg", available: true },
+  { id: 18, title: "O Alquimista", author: "Paulo Coelho", cover: "https://covers.openlibrary.org/b/id/9642341-L.jpg", available: true },
+  { id: 19, title: "A Guerra dos Tronos", author: "George R.R. Martin", cover: "https://covers.openlibrary.org/b/id/9642024-L.jpg", available: true },
+  { id: 20, title: "Sherlock Holmes: Um Estudo em Vermelho", author: "Arthur Conan Doyle", cover: "https://covers.openlibrary.org/b/id/9641953-L.jpg", available: true }
 ];
