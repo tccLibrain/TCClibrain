@@ -178,16 +178,16 @@ export function renderLoginPage(container) {
       </div>
   `;
 
-  // Lógica de login
+  // ====== LÓGICA DE LOGIN CORRIGIDA ======
   const form = document.getElementById('login-form');
   form.onsubmit = (e) => {
     e.preventDefault();
-    const nome = form.nome.value.trim();
-    const cpf = form.cpf.value.trim();
+
     const tipoSelecionado = form.tipo.value;
+    const cpfInput = form.cpf.value.replace(/\D/g, ''); // remove pontos e traços
 
     const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    const user = usuarios.find(u => u.nome === nome && u.cpf === cpf);
+    const user = usuarios.find(u => u.cpf === cpfInput); // busca apenas pelo CPF
 
     if (!user) {
       alert('Usuário não encontrado.');
@@ -200,8 +200,8 @@ export function renderLoginPage(container) {
     }
 
     localStorage.setItem('user', JSON.stringify(user));
-    alert(`Bem-vindo(a), ${nome}!`);
-    navigateTo(user.tipo === 'admin' ? 'admin' : 'books'); // CORRIGIDO
+    alert(`Bem-vindo(a), ${user.nome}!`);
+    navigateTo(user.tipo === 'admin' ? 'admin' : 'books');
   };
 
   const registerLink = document.getElementById('go-register');

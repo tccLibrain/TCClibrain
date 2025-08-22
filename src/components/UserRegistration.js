@@ -426,6 +426,7 @@ function renderUserRegistrationStep2(container, step1Data) {
 
     const finalData = {
       ...step1Data,
+      tipo: 'leitor',
       email,
       genero,
       tel_residencial,

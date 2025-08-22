@@ -106,11 +106,6 @@ export function renderBookList(container) {
       margin-top: 6px;
     }
 
-    body {
-      background-color: #111;
-      font-family: 'Segoe UI', sans-serif;
-      color: #fff;
-    }
   `;
   container.appendChild(style);
 }
