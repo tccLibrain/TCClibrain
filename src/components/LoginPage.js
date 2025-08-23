@@ -3,147 +3,103 @@ import logo_librain_T from '../images/logo_librain_T.png';
 import { navigateTo } from '../router.js';
 
 export function renderLoginPage(container) {
-  // Garante que o admin e o user fixos existam
+  // Inicializa usuários padrão
   const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-  
-  // Verifica se o admin fixo existe
-  const adminExiste = usuarios.some(u => u.nome === 'admin' && u.cpf === '00000000000');
+
+  const adminExiste = usuarios.some(u => u.cpf === '00000000000');
   if (!adminExiste) {
     usuarios.push({
       nome: 'admin',
       cpf: '00000000000',
+      senha: 'admin123', // senha padrão
       tipo: 'admin'
     });
   }
 
-  // Verifica se o user fixo existe
-  const userExiste = usuarios.some(u => u.nome === 'user' && u.cpf === '11111111111');
+  const userExiste = usuarios.some(u => u.cpf === '11111111111');
   if (!userExiste) {
     usuarios.push({
       nome: 'user',
       cpf: '11111111111',
+      senha: 'user123', // senha padrão
       tipo: 'leitor'
     });
   }
 
   localStorage.setItem('usuarios', JSON.stringify(usuarios));
 
-  // Renderiza a interface
+  // Renderiza tela de login
   container.innerHTML = `
       <style>
-      html, body {
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        background-color: #434E70;
-      }
-
-      .containerLogin {
-        background-image: url('${folhaLogin}');
-        background-repeat: no-repeat;
-        display: flex;
-        width: 100%;
-        height: 280px;
-      }
-
-      .containerLogin img {
-        margin-top: 22px;
-      }
-
-      .login {
-        margin-top: 40px;
-        color: #fff;
-        font-family: arial black;
-        font-size: 220%;
-      }
-
-      .centro {
-        display: flex;
-        justify-content: center;
-      }
-
-      #login-form {
-        margin-top: 0px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        width: 100%;
-        max-width: 300px;
-        margin: auto;
-      }
-
-      #login-form input[type="text"],
-      #login-form input[type="password"] {
-        background-color: #CFD2DB; /* meio cinza meio azul */
-        color: #434E70; /* azul escuro */
-        border: none;
-        border-radius: 999px;
-        padding: 12px 20px;
-        font-family: arial black;
-        font-size: 16px;
-        text-align: center;
-        outline: none;
-        margin-bottom: 10px;
-        width: 100%;
-        box-sizing: border-box;
-      }
-
-      .input-preenchido {
-        background-color: #434E70;
-        color: #111;
-      }
-
-      .input-estilizado::placeholder {
-        color: #5e3366;
-        opacity: 0.7;
-      }
-
-      #login-form label {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        color: #fff;
-      }
-
-      #login-form button {
-        background-color: #9bb4ff; /* azul claro */
-        color: #fff; /* texto branco */
-        border: none;
-        border-radius: 999px;
-        padding: 12px 20px;
-        font-family: arial black;
-        font-size: 16px;
-        text-align: center;
-        outline: none;
-        margin-bottom: 10px;
-        width: 100%;
-        box-sizing: border-box;
-      }
-
-      #login-form + p {
-        text-align: center;
-      }
-
-      .textoBacana1 {
-        font-family: arial black;
-        color: #fff;
-      }
-
-      .conta {
-        display: flex;
-        text-align: center;
-        justify-content: center;
-        margin-top: 50px;
-        color: #fff;
-        font-family: arial black;
-        font-size: 80%;
-      }
-
-      a:link, a:visited {
-        color: #fff;
-        background-color: transparent;
-        text-decoration: none;
-      }
+        html, body {
+          height: 100%;
+          margin: 0;
+          padding: 0;
+          background-color: #434E70;
+        }
+        .containerLogin {
+          background-image: url('${folhaLogin}');
+          background-repeat: no-repeat;
+          display: flex;
+          width: 100%;
+          height: 280px;
+        }
+        .containerLogin img { margin-top: 22px; }
+        .login {
+          margin-top: 40px;
+          color: #fff;
+          font-family: arial black;
+          font-size: 220%;
+        }
+        .centro { display: flex; justify-content: center; }
+        #login-form {
+          margin-top: 0px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          width: 100%;
+          max-width: 300px;
+          margin: auto;
+        }
+        #login-form input[type="text"],
+        #login-form input[type="password"] {
+          background-color: #CFD2DB;
+          color: #434E70;
+          border: none;
+          border-radius: 999px;
+          padding: 12px 20px;
+          font-family: arial black;
+          font-size: 16px;
+          text-align: center;
+          outline: none;
+          margin-bottom: 10px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        #login-form button {
+          background-color: #9bb4ff;
+          color: #fff;
+          border: none;
+          border-radius: 999px;
+          padding: 12px 20px;
+          font-family: arial black;
+          font-size: 16px;
+          text-align: center;
+          outline: none;
+          margin-bottom: 10px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .conta {
+          display: flex;
+          text-align: center;
+          justify-content: center;
+          margin-top: 50px;
+          color: #fff;
+          font-family: arial black;
+          font-size: 80%;
+        }
+        a:link, a:visited { color: #fff; text-decoration: none; }
       </style>
 
       <div class='containerLogin centro'>
@@ -155,11 +111,8 @@ export function renderLoginPage(container) {
       </div>
 
       <form id="login-form">
-        <input type="text" name="nome" placeholder="Nome Completo" required />
-        <div id="error-nome" class="error-message"></div>
-
         <input type="text" name="cpf" placeholder="CPF" required />
-        <div id="error-cpf" class="error-message"></div>
+        <input type="password" name="senha" placeholder="Senha" required />
         
         <label>
           <input type="radio" name="tipo" value="leitor" checked />
@@ -178,16 +131,17 @@ export function renderLoginPage(container) {
       </div>
   `;
 
-  // ====== LÓGICA DE LOGIN CORRIGIDA ======
+  // Lógica de Login
   const form = document.getElementById('login-form');
   form.onsubmit = (e) => {
     e.preventDefault();
 
+    const cpfInput = form.cpf.value.replace(/\D/g, ''); // só números
+    const senhaInput = form.senha.value.trim();
     const tipoSelecionado = form.tipo.value;
-    const cpfInput = form.cpf.value.replace(/\D/g, ''); // remove pontos e traços
 
     const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    const user = usuarios.find(u => u.cpf === cpfInput); // busca apenas pelo CPF
+    const user = usuarios.find(u => u.cpf === cpfInput);
 
     if (!user) {
       alert('Usuário não encontrado.');
@@ -199,14 +153,20 @@ export function renderLoginPage(container) {
       return;
     }
 
-    localStorage.setItem('user', JSON.stringify(user));
+    if (user.senha !== senhaInput) {
+      alert('Senha incorreta.');
+      return;
+    }
+
+    localStorage.setItem('usuarioLogado', JSON.stringify(user));
     alert(`Bem-vindo(a), ${user.nome}!`);
     navigateTo(user.tipo === 'admin' ? 'admin' : 'books');
   };
 
+  // Link para cadastro
   const registerLink = document.getElementById('go-register');
   registerLink.onclick = (e) => {
     e.preventDefault();
-    navigateTo('register'); 
+    navigateTo('register');
   };
 }

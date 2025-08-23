@@ -5,9 +5,15 @@ import { renderAdminPanel } from './components/AdminPanel.js';
 import { renderLoginPage } from './components/LoginPage.js';
 import { renderUserDashboard } from './components/UserDashboard.js';
 
+// Função de navegação
 export function navigateTo(screen, data = {}) {
   const app = document.getElementById('app');
   app.innerHTML = '';
+
+  // Salva a tela atual, exceto se for login
+  if (screen !== 'login') {
+    localStorage.setItem('currentPage', screen);
+  }
 
   switch (screen) {
     case 'login':
@@ -38,3 +44,19 @@ export function navigateTo(screen, data = {}) {
       renderLoginPage(app);
   }
 }
+
+// Inicializa app mantendo usuário logado
+window.addEventListener('DOMContentLoaded', () => {
+  const user = JSON.parse(localStorage.getItem('user'));
+  const lastPage = localStorage.getItem('currentPage');
+
+  if (user) {
+    if (user.tipo === 'admin') {
+      navigateTo('admin');
+    } else {
+      navigateTo(lastPage && lastPage !== 'login' ? lastPage : 'books');
+    }
+  } else {
+    navigateTo('login');
+  }
+});

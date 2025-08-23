@@ -1,111 +1,89 @@
 import { books as initialBooks } from '../data/books.js';
 import { navigateTo } from '../main.js';
 
-// Defina os gêneros de cada livro (você pode expandir conforme quiser)
 const livrosPorGenero = {
-  "Romance": [1, 7], // IDs do books.js
   "Fantasia": [2, 3, 8, 19],
+  "Mistério": [14],
+  "Romance": [1, 7],
   "Clássicos": [4, 5, 6, 9, 11, 10],
   "Young Adult": [15, 16, 17],
   "Terror": [13],
-  "Mistério": [14],
   "Ficção Científica": [18],
 };
 
 export function renderBookList(container) {
-  const books = JSON.parse(localStorage.getItem('books')) || initialBooks;
-  localStorage.setItem('books', JSON.stringify(books));
-
   container.innerHTML = '';
 
-  // Criar cada carrossel por gênero
-  Object.entries(livrosPorGenero).forEach(([genero, ids]) => {
-    const section = document.createElement('div');
-    section.className = 'genre-section';
+  let books = JSON.parse(localStorage.getItem('books')) || initialBooks;
+  if (!localStorage.getItem('books')) localStorage.setItem('books', JSON.stringify(books));
 
-    const title = document.createElement('h2');
-    title.textContent = genero;
-    section.appendChild(title);
-
-    const carousel = document.createElement('div');
-    carousel.className = 'carousel';
-
-    ids.forEach(id => {
-      const book = books.find(b => b.id === id);
-      if (!book) return;
-
-      const card = document.createElement('div');
-      card.className = 'book-card';
-      card.innerHTML = `
-        <img src="${book.cover}" alt="${book.title}" class="book-cover"/>
-        <h3 class="book-title">${book.title}</h3>
-      `;
-      card.addEventListener('click', () => {
-        navigateTo('details', { bookId: book.id });
-      });
-      carousel.appendChild(card);
-    });
-
-    section.appendChild(carousel);
-    container.appendChild(section);
-  });
-
-  // Estilos do carrossel
-  const style = document.createElement('style');
-  style.textContent = `
-    .genre-section {
-      margin-bottom: 40px;
-    }
-
-    .genre-section h2 {
-      margin-left: 20px;
-      color: #fff;
-      font-size: 1.5rem;
-    }
-
-    .carousel {
-      display: flex;
-      overflow-x: auto;
-      gap: 16px;
-      padding: 10px 20px;
-      scroll-behavior: smooth;
-    }
-
-    .carousel::-webkit-scrollbar {
-      height: 8px;
-    }
-
-    .carousel::-webkit-scrollbar-thumb {
-      background: #444;
-      border-radius: 4px;
-    }
-
-    .book-card {
-      flex: 0 0 auto;
-      width: 140px;
-      cursor: pointer;
-      transition: transform 0.2s ease;
-    }
-
-    .book-card:hover {
-      transform: scale(1.1);
-    }
-
-    .book-cover {
-      width: 100%;
-      height: 200px;
-      object-fit: cover;
-      border-radius: 8px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.5);
-    }
-
-    .book-title {
-      font-size: 0.9rem;
-      color: #fff;
-      text-align: center;
-      margin-top: 6px;
-    }
-
+  const mainEl = document.createElement('div');
+  mainEl.style.padding = '12px';
+  mainEl.style.overflowY = 'auto';
+  mainEl.innerHTML = `
+    <div class="search-row">
+      <div class="search-box">
+        <input id="search-input" type="text" placeholder="Pesquisar título ou autor..." />
+        <button id="search-clear" title="Limpar">✖️</button>
+      </div>
+    </div>
   `;
-  container.appendChild(style);
+
+  container.appendChild(mainEl);
+
+  const searchInput = mainEl.querySelector('#search-input');
+  const searchClear = mainEl.querySelector('#search-clear');
+
+  function renderSections(allBooks) {
+    mainEl.querySelectorAll('.genre-section').forEach(s => s.remove());
+
+    Object.entries(livrosPorGenero).forEach(([genero, ids]) => {
+      const livrosDoGenero = ids.map(id => allBooks.find(b => b.id === id)).filter(Boolean);
+      if (!livrosDoGenero.length) return;
+
+      const section = document.createElement('section');
+      section.className = 'genre-section';
+
+      const title = document.createElement('div');
+      title.className = 'genre-title';
+      title.textContent = genero;
+
+      const carousel = document.createElement('div');
+      carousel.className = 'carousel';
+      carousel.style.display = 'flex';
+      carousel.style.gap = '12px';
+      carousel.style.overflowX = 'auto';
+
+      livrosDoGenero.forEach(book => {
+        const card = document.createElement('div');
+        card.className = 'book-card';
+        card.style.flex = '0 0 auto';
+        card.style.width = '110px';
+        card.style.cursor = 'pointer';
+        card.innerHTML = `
+          <img class="book-cover" src="${book.cover || ''}" alt="${book.title}" style="width:100px;height:140px;object-fit:cover;border-radius:6px;" />
+          <div class="book-title" style="font-size:12px;margin-top:8px;text-align:center;">${book.title}</div>
+        `;
+        card.addEventListener('click', () => navigateTo('details', { bookId: book.id }));
+        carousel.appendChild(card);
+      });
+
+      section.appendChild(title);
+      section.appendChild(carousel);
+      mainEl.appendChild(section);
+    });
+  }
+
+  renderSections(books);
+
+  function doSearch() {
+    const q = (searchInput.value || '').trim().toLowerCase();
+    renderSections(q ? books.filter(b => (b.title + ' ' + (b.author || '')).toLowerCase().includes(q)) : books);
+  }
+
+  searchInput.addEventListener('input', doSearch);
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    doSearch();
+  });
 }

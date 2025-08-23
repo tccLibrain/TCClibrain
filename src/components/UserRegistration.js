@@ -30,6 +30,11 @@ function validarTelefone(numero) {
   return numero.replace(/\D/g, '').length === 11;
 }
 
+// Validação de senha forte
+function validarSenha(senha) {
+  return senha.length >= 8;
+}
+
 export function renderUserRegistration(container) {
   container.innerHTML = `
     <style>
@@ -72,9 +77,10 @@ export function renderUserRegistration(container) {
       }
 
       #registration-step1 input[type="text"],
+      #registration-step1 input[type="password"],
       #registration-step1 input[type="date"] {
-        background-color: #CFD2DB; /* meio cinza meio azul */
-        color: #434E70; /* azul escuro */
+        background-color: #CFD2DB;
+        color: #434E70;
         border: none;
         border-radius: 999px;
         padding: 12px 20px;
@@ -87,25 +93,14 @@ export function renderUserRegistration(container) {
         box-sizing: border-box;
       }
 
-      .input-preenchido {
-        background-color: #434E70;
-        color: #111;
-      }
-
       .input-estilizado::placeholder {
         color: #5e3366;
         opacity: 0.7;
       }
 
-      #registration-step1 label {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-      }
-
       #registration-step1 button {
-        background-color: #9bb4ff; /* azul claro */
-        color: #fff; 
+        background-color: #9bb4ff;
+        color: #fff;
         border: none;
         border-radius: 999px;
         padding: 12px 20px;
@@ -144,6 +139,9 @@ export function renderUserRegistration(container) {
       <input id="cpf" type="text" name="cpf" placeholder="CPF" required />
       <div id="error-cpf" class="error-message"></div>
 
+      <input id="senha" type="password" name="senha" placeholder="Crie uma senha" required />
+      <div id="error-senha" class="error-message"></div>
+
       <input id="data_nascimento" type="date" name="data_nascimento" required />
       <div id="error-data_nascimento" class="error-message"></div>
 
@@ -155,7 +153,6 @@ export function renderUserRegistration(container) {
       </div>
   `;
 
-  // Clique em "Já possui uma conta? Entre"
   const linkLogin = document.getElementById('go-login');
   if (linkLogin) {
     linkLogin.addEventListener('click', (e) => {
@@ -164,7 +161,6 @@ export function renderUserRegistration(container) {
     });
   }
 
-  // Aplica máscara CPF
   IMask(document.getElementById('cpf'), {
     mask: '000.000.000-00',
   });
@@ -174,14 +170,14 @@ export function renderUserRegistration(container) {
   formStep1.onsubmit = (e) => {
     e.preventDefault();
 
-    // Limpa erros
-    ['nome', 'cpf', 'data_nascimento'].forEach(field => {
+    ['nome', 'cpf', 'senha', 'data_nascimento'].forEach(field => {
       document.getElementById('error-' + field).textContent = '';
     });
 
     const nome = document.getElementById('nome').value.trim();
     let cpf = document.getElementById('cpf').value.trim();
     cpf = cpf.replace(/[^\d]+/g, '');
+    const senha = document.getElementById('senha').value.trim();
     const data_nascimento = document.getElementById('data_nascimento').value.trim();
 
     let hasError = false;
@@ -203,6 +199,11 @@ export function renderUserRegistration(container) {
       }
     }
 
+    if (!validarSenha(senha)) {
+      document.getElementById('error-senha').textContent = 'Senha deve ter pelo menos 8 caracteres.';
+      hasError = true;
+    }
+
     if (!data_nascimento) {
       document.getElementById('error-data_nascimento').textContent = 'Data de nascimento é obrigatória.';
       hasError = true;
@@ -210,8 +211,7 @@ export function renderUserRegistration(container) {
 
     if (hasError) return;
 
-    // Se passou em todas as validações → chama etapa 2
-    renderUserRegistrationStep2(container, { nome, cpf, data_nascimento });
+    renderUserRegistrationStep2(container, { nome, cpf, senha, data_nascimento });
   };
 }
 
@@ -227,9 +227,7 @@ function renderUserRegistrationStep2(container, step1Data) {
         color: #fff;
         font-family: Arial, sans-serif;
       }
-      label {
-        font-weight: bold;
-      }
+      label { font-weight: bold; }
       input, select {
         padding: 8px;
         border-radius: 8px;
@@ -256,15 +254,6 @@ function renderUserRegistrationStep2(container, step1Data) {
         background-color: #9bb4ff;
         margin-top: 10px;
       }
-      .conta {
-        display: flex;
-        text-align: center;
-        justify-content: center;
-        margin-top: 50px;
-        color: #fff;
-        font-family: arial black;
-        font-size: 80%;
-      }
     </style>
 
     <h1>Cadastro - Etapa 2</h1>
@@ -282,6 +271,7 @@ function renderUserRegistrationStep2(container, step1Data) {
       </select>
       <div id="error-genero" class="error-message"></div>
 
+      <!-- Outros campos -->
       <label for="tel_residencial">Telefone Residencial</label>
       <input id="tel_residencial" type="tel" name="tel_residencial" placeholder="(00) 00000-0000" required />
       <div id="error-tel_residencial" class="error-message"></div>
@@ -302,9 +292,6 @@ function renderUserRegistrationStep2(container, step1Data) {
       <input id="numero" type="text" name="numero" placeholder="Número" required />
       <div id="error-numero" class="error-message"></div>
 
-      <label for="complemento">Complemento</label>
-      <input id="complemento" type="text" name="complemento" placeholder="Complemento" />
-
       <label for="cep">CEP</label>
       <input id="cep" type="text" name="cep" placeholder="00000-000" required />
       <div id="error-cep" class="error-message"></div>
@@ -320,22 +307,8 @@ function renderUserRegistrationStep2(container, step1Data) {
       <button type="submit">Finalizar Cadastro</button>
       <button type="button" id="btn-voltar">Voltar</button>
     </form>
-    
-    <div class='contaclasse'>
-      <p class='conta'>Já possui uma conta?<a href="#" id="go-login" style='margin-left: 5px; color: #9bb4ff;'>Entre</a></p>
-    </div>
   `;
 
-  // Clique em "Já possui uma conta? Entre"
-  const linkLogin = document.getElementById('go-login');
-  if (linkLogin) {
-    linkLogin.addEventListener('click', (e) => {
-      e.preventDefault();
-      navigateTo('login');
-    });
-  }
-
-  // Máscaras
   IMask(document.getElementById('tel_residencial'), { mask: '(00) 00000-0000' });
   IMask(document.getElementById('tel_comercial'), { mask: '(00) 00000-0000' });
   IMask(document.getElementById('cep'), { mask: '00000-000' });
@@ -350,13 +323,8 @@ function renderUserRegistrationStep2(container, step1Data) {
   formStep2.onsubmit = (e) => {
     e.preventDefault();
 
-    // Limpa erros
-    [
-      'email', 'genero', 'tel_residencial', 'tel_comercial',
-      'identidade', 'endereco', 'numero', 'cep', 'cidade', 'estado'
-    ].forEach(field => {
-      document.getElementById('error-' + field).textContent = '';
-    });
+    ['email','genero','tel_residencial','tel_comercial','identidade','endereco','numero','cep','cidade','estado']
+      .forEach(field => document.getElementById('error-' + field).textContent = '');
 
     const email = document.getElementById('email').value.trim();
     const genero = document.getElementById('genero').value;
@@ -365,7 +333,6 @@ function renderUserRegistrationStep2(container, step1Data) {
     const identidade = document.getElementById('identidade').value.trim();
     const endereco = document.getElementById('endereco').value.trim();
     const numero = document.getElementById('numero').value.trim();
-    const complemento = document.getElementById('complemento').value.trim();
     const cep = document.getElementById('cep').value.trim();
     const cidade = document.getElementById('cidade').value.trim();
     const estado = document.getElementById('estado').value.trim();
@@ -383,12 +350,12 @@ function renderUserRegistrationStep2(container, step1Data) {
     }
 
     if (!validarTelefone(tel_residencial)) {
-      document.getElementById('error-tel_residencial').textContent = 'Telefone residencial inválido. Use DDD + número (11 dígitos).';
+      document.getElementById('error-tel_residencial').textContent = 'Telefone inválido.';
       hasError = true;
     }
 
     if (!validarTelefone(tel_comercial)) {
-      document.getElementById('error-tel_comercial').textContent = 'Telefone comercial inválido. Use DDD + número (11 dígitos).';
+      document.getElementById('error-tel_comercial').textContent = 'Telefone inválido.';
       hasError = true;
     }
 
@@ -434,7 +401,6 @@ function renderUserRegistrationStep2(container, step1Data) {
       identidade,
       endereco,
       numero,
-      complemento,
       cep,
       cidade,
       estado
