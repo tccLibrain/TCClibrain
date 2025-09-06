@@ -1,0 +1,445 @@
+:root {
+  --azul-escuro: #212738;
+  --azul-original: #434E70;
+  --azul-claro: #9dadb7;
+  --cinza-claro: #e9e9e9;
+  --cinza-escuro: #bfbfbf;
+  --branco: #ffffff;
+}
+
+/* Reset e body */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: var(--azul-original);
+  color: var(--cinza-escuro);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#app {
+  width: 100%;
+  padding-bottom: 70px;
+  position: relative;
+}
+
+/* Header */
+.shell-header {
+  display: flex;
+  justify-content: space-between; /* espaça esquerda/centro/direita */
+  align-items: center;
+  padding: 0 16px;
+  height: 100px; /* altura máxima */
+  max-height: 100px;
+  background: var(--branco);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 1003;
+  margin-bottom: 0;
+}
+
+.header-left, .header-center, .header-right {
+  display: flex;
+  align-items: center;
+}
+
+.header-left {
+  flex: 0 0 auto;
+  margin-left: 0px; /* distancia do avatar da borda esquerda */
+}
+
+.header-center {
+  flex: 1;
+  justify-content: center;
+}
+
+
+.header-right {
+  flex: 0 0 auto;
+  margin-right: 32px; /* distancia do botão da borda direita */
+}
+
+/* Avatar do usuário à esquerda */
+.shell-header .avatar {
+  width: 60px;
+  height: 60px;
+  max-height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* Logo centralizado */
+.shell-header .logo {
+  height: 80px;
+  max-height: 100px;
+  object-fit: contain;
+}
+
+/* Botão de menu à direita */
+.menu-btn {
+  font-size: 24px;
+  background: var(--azul-escuro);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.menu-btn {
+  font-size: 24px;
+  background: var(--azul-escuro);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+/* Menu lateral */
+#menu-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 250px;
+  background: #222;
+  color: #fff;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  z-index: 1004;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+#menu-wrapper.show {
+  transform: translateX(0);
+}
+
+#menu-wrapper nav {
+  display: flex;
+  flex-direction: column;
+}
+
+#menu-wrapper nav a {
+  display: block;
+  padding: 15px 0;
+  color: #fff;
+  font-size: 18px;
+  text-decoration: none;
+}
+
+#menu-wrapper nav a:hover {
+  text-decoration: underline;
+}
+
+/* Overlay */
+#overlay-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  z-index: 1003;
+  display: none;
+}
+
+#overlay-menu.show {
+  display: block;
+}
+
+/* Footer */
+.footer-nav {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  background: var(--branco);
+  display: flex;
+  justify-content: space-around;
+  padding: 0.5rem 0;
+  box-shadow: 0 -1px 5px rgba(0,0,0,0.1);
+  z-index: 100;
+}
+
+.footer-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--azul-original);
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.footer-btn span {
+  display: block;
+  font-size: 12px;
+}
+
+.footer-btn.active {
+  color: var(--azul-escuro);
+  font-weight: bold;
+}
+
+/* Conteúdo principal */
+.content {
+  margin-top: 90px; /* altura do header + um espaçamento */
+  padding: 12px;
+  overflow-y: auto;
+}
+
+/* Dashboard e cards de livros */
+.livros-grid {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 1rem 1rem;
+}
+
+.livro-card {
+  min-width: 100px;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.livro-card img {
+  width: 100px;
+  height: 150px;
+  object-fit: cover;
+  display: block;
+}
+
+h1, h2 {
+  color: var(--azul-escuro);
+  margin-left: 1rem;
+}
+
+ul {
+  list-style: none;
+  padding: 0 1rem;
+}
+
+ul li {
+  background: var(--branco);
+  margin-bottom: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  font-size: 14px;
+}
+
+ul li strong {
+  color: var(--azul-original);
+}
+
+ul li em {
+  color: var(--azul-claro);
+  font-style: normal;
+}
+
+/* Botões */
+.btn-devolver, .btn {
+  background-color: var(--azul-escuro);
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.3s;
+}
+
+.btn-devolver:hover, .btn:hover {
+  background-color: var(--azul-original);
+}
+
+/* Scroll dentro do conteúdo */
+.content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content::-webkit-scrollbar-thumb {
+  background-color: var(--azul-original);
+  border-radius: 3px;
+}
+
+.content::-webkit-scrollbar-track {
+  background-color: var(--cinza-claro);
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+#search-input {
+  flex: 1; /* ocupa a maior parte da linha */
+  padding: 10px 16px; /* mais espaçamento interno */
+  font-size: 16px;
+  border-radius: 20px; /* bordas arredondadas */
+  border: 1px solid #ccc;
+  outline: none;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+#search-input:focus {
+  border-color: #9bb4ff;
+  box-shadow: 0 2px 6px rgba(155,180,255,0.3);
+}
+
+#search-clear {
+  padding: 0 12px;
+  border-radius: 50%;
+  border: none;
+  background: #ff6b6b;
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+/* Fundo do perfil */
+.containerFundoPerfil {
+  width: 100%;
+  height: 280px; /* ajuste como quiser */
+  background-image: url('${fundoTopoPerfil}');
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  justify-content: center; /* centraliza avatar horizontalmente */
+  align-items: center;     /* centraliza avatar verticalmente */
+  position: relative;
+}
+
+/* Avatar circular */
+.profile-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #fff;
+  z-index: 2; /* garante que fique acima do fundo */
+}
+
+/* Botão de editar avatar */
+.avatar-edit {
+  position: absolute;
+  bottom: 10px;
+  right: calc(50% - 60px); /* centraliza relativo ao avatar */
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  z-index: 3;
+}
+
+/* Nome e bio abaixo do avatar */
+.profile-info {
+  text-align: center;
+  margin-top: 8px;
+  max-width: 90%;
+}
+
+.profile-header-container {
+  display: flex; 
+  flex-direction: column; /* vertical: fundo -> avatar -> info */ 
+  align-items: center; 
+  gap: 16px; 
+}
+
+.rating-input {
+  display: inline-flex;
+  flex-direction: row; /* normal, esquerda → direita */
+}
+
+.rating-input .star {
+  cursor: pointer;
+  font-size: 28px;
+  color: #ccc;
+  transition: color 0.2s ease;
+}
+
+/* Hover pinta da estrela atual pra esquerda */
+.rating-input .star:hover,
+.rating-input .star:hover ~ .star {
+  color: #ccc; /* apaga as da direita */
+}
+
+.rating-input .star:hover,
+.rating-input .star:hover ~ .star {
+  color: #ccc;
+}
+
+.rating-input .star:hover,
+.rating-input .star:hover ~ .star {
+  color: #ccc;
+}
+
+.rating-input .star:hover,
+.rating-input .star:hover ~ .star {
+  color: #ccc;
+}
+
+.star.filled,
+.rating-input .star:hover,
+.rating-input .star:hover ~ .star {
+  color: #f5b301; /* amarelo nas selecionadas */
+}
+
+
+.star.filled {
+  color: #f5b301; /* amarelo dourado */
+}
+
+.rating-input .star {
+  cursor: pointer;
+}
+
+.rating-input .star:hover,
+.rating-input .star:hover ~ .star {
+  color: #f5b301; /* destaque no hover */
+}
+
+/* ===========================
+   Seção de avaliações
+   =========================== */
+.avg-rating {
+  margin: 10px 0;
+  font-weight: bold;
+  font-size: 16px;
+  color: #333;
+}
+
+.review-card {
+  background: #f9f9f9;
+  padding: 10px;
+  margin: 8px 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.review-card.self-review {
+  border: 2px solid #4caf50; /* destaque verde para a resenha do próprio usuário */
+}
+
+.review-card strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.stars-display {
+  margin: 4px 0;
+}
