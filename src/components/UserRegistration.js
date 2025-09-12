@@ -401,16 +401,33 @@ function renderUserRegistrationStep2(container, step1Data) {
       identidade,
       endereco,
       numero,
-      cep,
+      cep: cep.replace('-', ''),
       cidade,
       estado
     };
 
-    const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    usuarios.push(finalData);
-    localStorage.setItem('usuarios', JSON.stringify(usuarios));
+    const apiUrl = 'http://localhost:3000/api/register';
 
-    alert('Cadastro realizado com sucesso!');
-    navigateTo('login');
-  };
+    fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(finalData)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.text().then(text => { throw new Error(text) });
+        }
+        return response.text();
+    })
+    .then(message => {
+        alert(message);
+        navigateTo('login');
+    })
+    .catch(error => {
+        console.error('Erro de cadastro:', error);
+        alert(error.message);
+    });
+  }
 }

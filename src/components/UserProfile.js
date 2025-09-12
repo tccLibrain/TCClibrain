@@ -21,7 +21,7 @@ export function renderUserProfile(container) {
     <style>
       .content {
         margin-top: 80px;
-        padding: 12px;
+        padding: 0;
         overflow-y: auto;
       }
 
@@ -31,9 +31,7 @@ export function renderUserProfile(container) {
     
       .containerFundoPerfil {
         position: relative;
-        width: calc(100vw + 14px);
-        margin-left: -16px;
-        margin-right: -16px;
+        width: 100%;
         height: 200px;
         background-image: url('${fundoTopoPerfil}');
         background-size: cover;
@@ -45,13 +43,6 @@ export function renderUserProfile(container) {
         border-bottom-right-radius: 20px;
       }
 
-      .bio-edit-icon {
-        cursor: pointer;
-        font-size: 1.2em;
-        margin-left: 8px;
-        color: #555;
-      }
-
       .bio-textarea {
         width: 100%;
         min-height: 80px;
@@ -60,56 +51,83 @@ export function renderUserProfile(container) {
         padding: 8px;
         margin-top: 8px;
       }
+      
+      .bio-save-btn {
+        background-color: #9bb4ff;
+        color: #fff;
+        border: none;
+        border-radius: 999px;
+        padding: 8px 16px;
+        font-family: arial black;
+        font-size: 14px;
+        cursor: pointer;
+        margin-top: 10px;
+      }
+
+      .profile-info {
+        background-color: #CFD2DB;
+        border-radius: 12px;
+        padding: 12px 20px;
+        margin: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .separator-line {
+        width: 100%;
+        height: 2px;
+        background-color: #b0b0b0;
+        margin: 20px 0;
+      }
+
+      .profile-stats {
+        padding: 20px;
+        margin: 0;
+      }
+
+      .profile-footer {
+        padding: 20px;
+        margin: 0;
+      }
     </style>
 
-    <div class="profile-header-container" style="margin-left: -5px">
+    <div>
       <div class="containerFundoPerfil">
-        <img src="${user.avatarUrl || 'https://i.pravatar.cc/150?img=12'}" 
-        alt="Avatar" class="profile-avatar" id="profile-avatar"/>
-        <label for="avatar-input" class="avatar-edit">✎</label>
+        <label for="avatar-input" class="avatar-edit">
+          <img src="${user.avatarUrl || 'https://i.pravatar.cc/150?img=12'}" 
+          alt="Avatar" class="profile-avatar" id="profile-avatar"/>
+        </label>
+        
         <input type="file" id="avatar-input" accept="image/*" style="display:none"/>
       </div>
-    </div>
-
-    <div class="profile-info centro" style="
-      background-color: #CFD2DB;
-      border-radius: 12px;
-      padding: 12px 20px;
-      margin-top: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      max-width: 90%;
-      margin-left: -10px">
-      <h2 style="margin:0 0 8px 0;">${user.nome}</h2>
-      <p id="bioText" style="margin: 0; color: black">${user.bio || 'Ainda não tem uma biografia'}</p>
-      <span id="editBioBtn" class="bio-edit-icon">✏️</span>
-    </div>
-
-    <div style="
-      width: 100%;
-      height: 2px;
-      background-color: #b0b0b0;
-      margin: 0;
-      margin-left: -40px;
-      margin-right: -40px;
-    "></div>
-
-    <div class="profile-stats">
-      <div>
-        <h3>📚 Livros lidos</h3>
-        <p>${livrosLidos}</p>
+  
+      <div class="profile-info centro" id="bioContainer">
+        <h2 style="margin:0 0 8px 0;">${user.nome}</h2>
+        <p id="bioText" style="margin: 0; color: black">
+          ${user.bio || 'Ainda não tem uma biografia'}
+        </p>
       </div>
-      <div>
-        <h3>📖 Paginômetro</h3>
-        <p>${paginasLidas}</p>
+  
+      <div class="separator-line"></div>
+  
+      <div class="profile-stats">
+        <div>
+          <h3>📚 Livros lidos</h3>
+          <p>${livrosLidos}</p>
+        </div>
+        <div>
+          <h3>📖 Paginômetro</h3>
+          <p>${paginasLidas}</p>
+        </div>
       </div>
-    </div>
-
-    <div class="profile-footer">
-      <p>Usuário cadastrado em ${user.dataCadastro || 'Não informado'}</p>
-      <button id="logoutBtn" class="btn">Sair</button>
+  
+      <div class="profile-footer">
+        <p>Usuário cadastrado em ${user.dataCadastro || 'Não informado'}</p>
+        <button id="logoutBtn" class="btn">Sair</button>
+      </div>
     </div>
   `;
 
@@ -118,8 +136,7 @@ export function renderUserProfile(container) {
   const avatarInput = document.getElementById('avatar-input');
   const avatarImg = document.getElementById('profile-avatar');
   const bioText = document.getElementById('bioText');
-  const editBioBtn = document.getElementById('editBioBtn');
-  let isEditingBio = false;
+  const bioContainer = document.getElementById('bioContainer');
 
   avatarInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -140,27 +157,49 @@ export function renderUserProfile(container) {
     reader.readAsDataURL(file);
   });
 
-  editBioBtn.addEventListener('click', () => {
-    if (!isEditingBio) {
-      // Modo de edição
-      const currentBio = bioText.textContent.trim() === 'Ainda não tem uma biografia' ? '' : bioText.textContent.trim();
-      bioText.innerHTML = `<textarea id="bioTextarea" class="bio-textarea">${currentBio}</textarea>`;
-      editBioBtn.textContent = '✔️ Salvar';
-      isEditingBio = true;
-    } else {
-      // Salvar a biografia
-      const newBio = document.getElementById('bioTextarea').value;
+  bioText.addEventListener('click', () => {
+    if (bioContainer.querySelector('textarea')) return;
+
+    const currentBio = bioText.textContent.trim() === 'Ainda não tem uma biografia' ? '' : bioText.textContent.trim();
+    
+    bioContainer.innerHTML = `
+      <h2 style="margin:0 0 8px 0;">${user.nome}</h2>
+      <textarea id="bioTextarea" class="bio-textarea">${currentBio}</textarea>
+      <button id="saveBioBtn" class="bio-save-btn">✔️ Salvar</button>
+    `;
+
+    const saveBioBtn = document.getElementById('saveBioBtn');
+    const bioTextarea = document.getElementById('bioTextarea');
+
+    bioTextarea.focus();
+
+    saveBioBtn.addEventListener('click', () => {
+      const newBio = bioTextarea.value;
       user.bio = newBio.trim();
       localStorage.setItem('user', JSON.stringify(user));
-      localStorage.setItem(`user-${user.cpf}`, JSON.stringify(user));
 
-      bioText.textContent = user.bio || 'Ainda não tem uma biografia';
-      editBioBtn.textContent = '✏️';
-      isEditingBio = false;
-    }
+      const allUsers = JSON.parse(localStorage.getItem('usuarios')) || [];
+      const userIndex = allUsers.findIndex(u => u.cpf === user.cpf);
+      if (userIndex !== -1) {
+        allUsers[userIndex] = user;
+        localStorage.setItem('usuarios', JSON.stringify(allUsers));
+      }
+
+      bioContainer.innerHTML = `
+        <h2 style="margin:0 0 8px 0;">${user.nome}</h2>
+        <p id="bioText" style="margin: 0; color: black">
+          ${user.bio || 'Ainda não tem uma biografia'}
+        </p>
+      `;
+
+      // Para evitar a duplicação de eventos, a melhor prática seria recriar o listener aqui
+      // ou recarregar a página, mas por simplicidade, a solução é copiar o código abaixo.
+      document.getElementById('bioText').addEventListener('click', () => {
+         location.reload(); 
+      });
+    });
   });
 
-  // Adiciona o evento de logout ao botão do rodapé
   const logoutBtn = document.getElementById('logoutBtn');
   if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
