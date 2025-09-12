@@ -3,51 +3,40 @@ import logo_librain_T from '../images/logo_librain_T.png';
 import { navigateTo } from '../main.js';
 
 export function renderLoginPage(container) {
-  const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-
-  if (!usuarios.some(u => u.cpf === '00000000000')) {
-    usuarios.push({ nome: 'admin', cpf: '00000000000', senha: 'admin123', tipo: 'admin' });
-  }
-  if (!usuarios.some(u => u.cpf === '11111111111')) {
-    usuarios.push({ nome: 'user', cpf: '11111111111', senha: 'user123', tipo: 'leitor' });
-  }
-
-  localStorage.setItem('usuarios', JSON.stringify(usuarios));
-
   container.innerHTML = `
-      <style>
-    html, body {
+    <style>
+      html, body {
         height: 100%;
         margin: 0;
         padding: 0;
         background-color: #434E70;
-    }
+      }
 
-    .containerLogin {
+      .containerLogin {
         background-image: url('${folhaLogin}');
         background-repeat: no-repeat;
         display: flex;
         width: 100%;
         height: 280px;
-    }
+      }
 
-    .containerLogin img {
+      .containerLogin img {
         margin-top: 22px;
-    }
+      }
 
-    .login {
+      .login {
         margin-top: 40px;
         color: #fff;
         font-family: arial black;
         font-size: 220%;
-    }
+      }
 
-    .centro {
+      .centro {
         display: flex;
         justify-content: center;
-    }
+      }
 
-    #login-form {
+      #login-form {
         margin-top: 0px;
         display: flex;
         flex-direction: column;
@@ -55,10 +44,10 @@ export function renderLoginPage(container) {
         width: 100%;
         max-width: 300px;
         margin: auto;
-    }
-    
-    #login-form input[type="text"], 
-    #login-form input[type="password"] {
+      }
+      
+      #login-form input[type="text"], 
+      #login-form input[type="password"] {
         background-color: #CFD2DB;
         color: #434E70;
         border: none;
@@ -71,9 +60,9 @@ export function renderLoginPage(container) {
         margin-bottom: 10px;
         width: 100%;
         box-sizing: border-box;
-    }
-    
-    #login-form button {
+      }
+      
+      #login-form button {
         background-color: #9bb4ff;
         color: #fff;
         border: none;
@@ -86,9 +75,9 @@ export function renderLoginPage(container) {
         margin-bottom: 10px;
         width: 100%;
         box-sizing: border-box;
-    }
-    
-    .conta {
+      }
+      
+      .conta {
         display: flex;
         text-align: center;
         justify-content: center;
@@ -96,49 +85,70 @@ export function renderLoginPage(container) {
         color: #fff;
         font-family: arial black;
         font-size: 80%;
-    }
-    
-    a:link, a:visited {
+      }
+      
+      a:link, a:visited {
         color: #fff;
         text-decoration: none;
-    }
-</style>
+      }
+    </style>
 
-      <div class='containerLogin centro'>
-        <img src="${logo_librain_T}" alt="Logo" height='200px' width='200px'>
-      </div>
+    <div class='containerLogin centro'>
+      <img src="${logo_librain_T}" alt="Logo" height='200px' width='200px'>
+    </div>
 
-      <div class='centro'><p class='login'>Login</p></div>
+    <div class='centro'><p class='login'>Login</p></div>
 
-      <form id="login-form">
-        <input type="text" name="cpf" placeholder="CPF" required />
-        <input type="password" name="senha" placeholder="Senha" required />
-        <label><input type="radio" name="tipo" value="leitor" checked /> Leitor</label>
-        <label><input type="radio" name="tipo" value="admin" /> Administrador</label>
-        <button type="submit">Entrar</button>
-      </form>
+    <form id="login-form">
+      <input type="text" name="cpf" placeholder="CPF" required />
+      <input type="password" name="senha" placeholder="Senha" required />
+      <label><input type="radio" name="tipo" value="leitor" checked /> Leitor</label>
+      <label><input type="radio" name="tipo" value="admin" /> Administrador</label>
+      <button type="submit">Entrar</button>
+    </form>
 
-      <div class='contaclasse'>
-        <p class='conta'>Ainda não fez cadastro?<a href="#" id="go-register" style='margin-left: 5px; color: #9bb4ff;'>Cadastre-se</a></p>
-      </div>
+    <div class='contaclasse'>
+      <p class='conta'>Ainda não fez cadastro?<a href="#" id="go-register" style='margin-left: 5px; color: #9bb4ff;'>Cadastre-se</a></p>
+    </div>
   `;
 
   const form = document.getElementById('login-form');
-  form.onsubmit = (e) => {
+  const cpfInput = form.cpf;
+  const senhaInput = form.senha;
+
+  form.onsubmit = async (e) => {
     e.preventDefault();
-    const cpfInput = form.cpf.value.replace(/\D/g, '');
-    const senhaInput = form.senha.value.trim();
-    const tipoSelecionado = form.tipo.value;
-    const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    const user = usuarios.find(u => u.cpf === cpfInput);
+    console.log('Botão de login clicado!');
 
-    if (!user) { alert('Usuário não encontrado.'); return; }
-    if (user.tipo !== tipoSelecionado) { alert('Tipo de usuário incorreto.'); return; }
-    if (user.senha !== senhaInput) { alert('Senha incorreta.'); return; }
+    // AQUI ESTÁ A CORREÇÃO: Pega o valor do botão de rádio marcado
+    const tipo = form.querySelector('input[name="tipo"]:checked').value;
 
-    localStorage.setItem('user', JSON.stringify(user));
-    alert(`Bem-vindo(a), ${user.nome}!`);
-    navigateTo(user.tipo === 'admin' ? 'admin' : 'books');
+    const data = {
+      cpf: cpfInput.value,
+      senha: senhaInput.value,
+      tipo: tipo
+    };
+
+    try {
+      const response = await fetch('http://localhost:3000/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const user = await response.json();
+        alert(`Bem-vindo(a), ${user.nome}!`);
+        await navigateTo(user.tipo === 'admin' ? 'admin' : 'books', { user });
+      } else {
+        const errorText = await response.text();
+        alert(`Erro de login: ${errorText}`);
+      }
+    } catch (error) {
+      alert('Erro de conexão ao tentar fazer login.');
+      console.error('Erro de login:', error);
+    }
   };
 
   const registerLink = document.getElementById('go-register');

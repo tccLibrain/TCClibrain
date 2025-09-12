@@ -1,30 +1,57 @@
 import { navigateTo } from '../main.js';
-import { books as initialBooks } from '../data/books.js';
 
-export function renderAdminPanel(container) {
-  const user = JSON.parse(localStorage.getItem('user'));
-  if (!user || user.tipo !== 'admin') {
-    navigateTo('login');
+export async function renderAdminPanel(container) {
+  // A validação do usuário e do tipo agora será feita no backend
+  // Por enquanto, vamos renderizar o painel e tratar a lógica de
+  // autenticação e autorização em uma etapa futura.
+
+  // 1. Obter todos os usuários do backend
+  let allUsers = [];
+  try {
+    const response = await fetch('http://localhost:3000/api/users');
+    if (response.ok) {
+      allUsers = await response.json();
+    } else {
+      console.error('Falha ao carregar usuários:', response.statusText);
+      alert('Falha ao carregar usuários.');
+      return;
+    }
+  } catch (error) {
+    console.error('Erro de rede:', error);
+    alert('Erro de conexão com o servidor.');
     return;
   }
 
-  let livros = JSON.parse(localStorage.getItem('books')) || [...initialBooks];
-  
-  // Obter todos os usuários do localStorage para a lógica interna
-  const allUsers = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key.startsWith('user-')) {
-      const storedUser = JSON.parse(localStorage.getItem(key));
-      allUsers.push(storedUser);
+  // 2. Obter todos os livros do backend
+  let livros = [];
+  try {
+    const response = await fetch('http://localhost:3000/api/books');
+    if (response.ok) {
+      livros = await response.json();
+    } else {
+      console.error('Falha ao carregar livros:', response.statusText);
+      alert('Falha ao carregar livros.');
+      return;
     }
+  } catch (error) {
+    console.error('Erro de rede:', error);
+    alert('Erro de conexão com o servidor.');
+    return;
   }
 
-  // Obter livros com solicitações de empréstimo (primeiro na fila)
-  const solicitacoesEmprestimo = livros.filter(book => book.queue && book.queue.length > 0);
+  // Obter devoluções pendentes do backend
+  let devolucoesPendentes = [];
+  try {
+    const response = await fetch('http://localhost:3000/api/admin/devolucoes');
+    if (response.ok) {
+      devolucoesPendentes = await response.json();
+    }
+  } catch (error) {
+    console.error('Erro ao carregar devoluções:', error);
+  }
 
-  // Obter devoluções pendentes (da sua lógica original)
-  const devolucoesPendentes = JSON.parse(localStorage.getItem('devolucoesPendentes')) || [];
+  // Obter solicitações de empréstimo (primeiro na fila)
+  const solicitacoesEmprestimo = livros.filter(book => book.queue && book.queue.length > 0);
 
   container.innerHTML = `
     <h1>Painel do Administrador</h1>
@@ -77,77 +104,93 @@ export function renderAdminPanel(container) {
   // === Event Listeners ===
 
   // Adicionar novo admin por CPF
-  container.querySelector('#form-add-admin').addEventListener('submit', (e) => {
+  container.querySelector('#form-add-admin').addEventListener('submit', async (e) => {
     e.preventDefault();
     const adminCpf = document.getElementById('admin-cpf').value.trim();
-    const targetUser = allUsers.find(u => u.cpf === adminCpf);
 
-    if (targetUser) {
-      if (targetUser.tipo === 'admin') {
-        alert('Este usuário já é um administrador.');
-      } else {
-        targetUser.tipo = 'admin';
-        localStorage.setItem(`user-${targetUser.cpf}`, JSON.stringify(targetUser));
-        alert(`O usuário ${targetUser.nome} agora é um administrador.`);
+    try {
+      const response = await fetch('http://localhost:3000/api/admin/add-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf: adminCpf })
+      });
+      const message = await response.text();
+      alert(message);
+      if (response.ok) {
         renderAdminPanel(container);
       }
-    } else {
-      alert('Usuário não encontrado. Verifique o CPF.');
+    } catch (error) {
+      alert('Erro ao tentar tornar usuário admin.');
+      console.error('Erro:', error);
     }
   });
 
   // Aprovar Devolução
   container.querySelectorAll('.btn-aprovar-devolucao').forEach(button => {
-    button.onclick = () => {
+    button.onclick = async () => {
       const index = Number(button.getAttribute('data-index'));
       const devolucao = devolucoesPendentes[index];
-      
-      const livro = livros.find(b => b.id === devolucao.bookId);
-      if (livro) {
-        livro.available = true;
-        livro.returnDate = null;
-        livro.emprestadoPara = null;
-        
-        devolucoesPendentes.splice(index, 1);
-        localStorage.setItem('devolucoesPendentes', JSON.stringify(devolucoesPendentes));
-        localStorage.setItem('books', JSON.stringify(livros));
-        
-        alert(`Devolução de "${livro.title}" aprovada.`);
-        renderAdminPanel(container);
+
+      try {
+        const response = await fetch('http://localhost:3000/api/admin/approve-return', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookId: devolucao.bookId, cpf: devolucao.cpf })
+        });
+        const message = await response.text();
+        alert(message);
+        if (response.ok) {
+          renderAdminPanel(container);
+        }
+      } catch (error) {
+        alert('Erro ao aprovar devolução.');
+        console.error('Erro:', error);
       }
     };
   });
 
   // Aprovar Solicitação de Empréstimo
   container.querySelectorAll('.btn-aprovar-solicitacao').forEach(button => {
-    button.onclick = () => {
+    button.onclick = async () => {
       const bookId = button.dataset.bookId;
-      const livro = livros.find(b => b.id === bookId);
-      if (livro && livro.queue.length > 0) {
-        const solicitanteCpf = livro.queue.shift();
-        livro.available = false;
-        livro.emprestadoPara = solicitanteCpf;
-        const returnDate = new Date();
-        returnDate.setDate(returnDate.getDate() + 14);
-        livro.returnDate = returnDate.toISOString().split('T')[0];
 
-        localStorage.setItem('books', JSON.stringify(livros));
-        alert(`Empréstimo de "${livro.title}" aprovado para ${solicitanteCpf}.`);
-        renderAdminPanel(container);
+      try {
+        const response = await fetch('http://localhost:3000/api/admin/approve-loan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookId })
+        });
+        const message = await response.text();
+        alert(message);
+        if (response.ok) {
+          renderAdminPanel(container);
+        }
+      } catch (error) {
+        alert('Erro ao aprovar empréstimo.');
+        console.error('Erro:', error);
       }
     };
   });
 
   // Negar Solicitação de Empréstimo
   container.querySelectorAll('.btn-negar-solicitacao').forEach(button => {
-    button.onclick = () => {
+    button.onclick = async () => {
       const bookId = button.dataset.bookId;
-      const livro = livros.find(b => b.id === bookId);
-      if (livro && livro.queue.length > 0) {
-        livro.queue.shift();
-        localStorage.setItem('books', JSON.stringify(livros));
-        alert(`Solicitação de "${livro.title}" negada. O próximo da fila, se houver, será considerado.`);
-        renderAdminPanel(container);
+
+      try {
+        const response = await fetch('http://localhost:3000/api/admin/deny-loan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookId })
+        });
+        const message = await response.text();
+        alert(message);
+        if (response.ok) {
+          renderAdminPanel(container);
+        }
+      } catch (error) {
+        alert('Erro ao negar empréstimo.');
+        console.error('Erro:', error);
       }
     };
   });
