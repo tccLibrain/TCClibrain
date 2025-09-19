@@ -1,5 +1,17 @@
 import { navigateTo } from '../main.js';
 
+// Função para criar imagem placeholder offline
+function createPlaceholderImage(title, width = 150, height = 210) {
+    const text = title ? title.substring(0, 8) : 'Sem Capa';
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+        <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#9dadb7"/>
+            <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#ffffff" 
+                  text-anchor="middle" dominant-baseline="middle">${text}</text>
+        </svg>
+    `)}`;
+}
+
 export async function renderBookDetails(container, bookId) {
     console.log('Carregando detalhes do livro:', bookId);
     
@@ -91,8 +103,8 @@ export async function renderBookDetails(container, bookId) {
             actionButtonHtml = '<p style="color: var(--azul-claro);">Faça login para solicitar empréstimos</p>';
         }
 
-        // Fallback para imagem usando cores do projeto
-        const imageUrl = book.cover || `https://via.placeholder.com/150x210/434E70/ffffff?text=${encodeURIComponent(book.title?.substring(0, 10) || 'Livro')}`;
+        // Usar placeholder offline em vez do via.placeholder.com
+        const imageUrl = book.cover || createPlaceholderImage(book.title);
 
         container.innerHTML = `
             <div class="book-details">
@@ -100,7 +112,7 @@ export async function renderBookDetails(container, bookId) {
                     <img src="${imageUrl}" 
                          class="book-cover-large" 
                          alt="${book.title}"
-                         onerror="this.src='https://via.placeholder.com/150x210/9dadb7/ffffff?text=Sem+Capa'"/>
+                         onerror="this.src='${createPlaceholderImage('Erro')}'; this.onerror=null;"/>
                     <div class="book-info">
                         <h2>${book.title || 'Título não disponível'}</h2>
                         <p><strong>Autor:</strong> ${book.author || 'Autor desconhecido'}</p>
@@ -234,77 +246,141 @@ export async function renderBookDetails(container, bookId) {
             });
         });
 
-        // Salvar resenha
-        const saveBtn = document.getElementById('saveReviewBtn');
-        if (saveBtn) {
-            saveBtn.onclick = async () => {
-                const text = document.getElementById('reviewText').value.trim();
-                if (selectedRating === 0 && !editingReviewId) {
-                    alert('Por favor, selecione uma classificação em estrelas.');
-                    return;
-                }
-                
-                const date = new Date().toLocaleString('pt-BR', { 
-                    day: '2-digit', 
-                    month: '2-digit', 
-                    year: 'numeric', 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                });
-                
-                let url = 'http://localhost:3000/api/reviews';
-                let method = 'POST';
-                let body = { bookId: parseInt(bookId), text, rating: selectedRating, date };
+// Salvar resenha - VERSÃO CORRIGIDA
+const saveBtn = document.getElementById('saveReviewBtn');
+if (saveBtn) {
+    saveBtn.onclick = async () => {
+        console.log('=== DEBUG SALVAR RESENHA ===');
+        
+        const text = document.getElementById('reviewText').value.trim();
+        console.log('Texto da resenha:', text);
+        console.log('Rating selecionado:', selectedRating);
+        console.log('Editando review ID:', editingReviewId);
+        
+        if (selectedRating === 0 && !editingReviewId) {
+            alert('Por favor, selecione uma classificação em estrelas.');
+            return;
+        }
+        
+        // NÃO ENVIAR DATE - deixar o servidor criar a data
+        let url = 'http://localhost:3000/api/reviews';
+        let method = 'POST';
+        let body = { 
+            bookId: parseInt(bookId), 
+            text: text, 
+            rating: selectedRating
+            // Removido: date - o servidor vai criar automaticamente
+        };
 
-                if (editingReviewId) {
-                    url = `${url}/${editingReviewId}`;
-                    method = 'PUT';
-                    body = { text, rating: selectedRating, date };
-                }
-
-                try {
-                    const response = await fetch(url, {
-                        method: method,
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify(body)
-                    });
-
-                    if (response.ok) {
-                        const message = await response.text();
-                        alert(message || 'Resenha salva com sucesso!');
-                        // Recarregar a página de detalhes
-                        renderBookDetails(container, bookId);
-                    } else {
-                        const errorText = await response.text();
-                        alert(`Erro ao salvar resenha: ${errorText}`);
-                    }
-                } catch (error) {
-                    alert('Erro de conexão ao salvar resenha.');
-                    console.error(error);
-                }
+        if (editingReviewId) {
+            url = `${url}/${editingReviewId}`;
+            method = 'PUT';
+            body = { 
+                text: text, 
+                rating: selectedRating
+                // Removido: date - o servidor vai atualizar automaticamente
             };
         }
 
-        // Botões de ação de empréstimo
+        console.log('URL:', url);
+        console.log('Method:', method);
+        console.log('Body:', body);
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify(body)
+            });
+
+            console.log('Status da resposta:', response.status);
+            console.log('Headers da resposta:', [...response.headers.entries()]);
+
+            if (response.ok) {
+                const responseData = await response.text();
+                console.log('Resposta do servidor:', responseData);
+                
+                alert(responseData || 'Resenha salva com sucesso!');
+                
+                // Recarregar a página de detalhes
+                renderBookDetails(container, bookId);
+            } else {
+                const errorText = await response.text();
+                console.error('Erro HTTP:', response.status, errorText);
+                
+                let userMessage = errorText;
+                if (response.status === 401) {
+                    userMessage = 'Você precisa estar logado para salvar resenhas';
+                } else if (response.status === 500) {
+                    userMessage = 'Erro interno do servidor. Tente novamente.';
+                }
+                
+                alert(`Erro ao salvar resenha: ${userMessage}`);
+            }
+        } catch (error) {
+            console.error('Erro de conexão:', error);
+            alert('Erro de conexão ao salvar resenha. Verifique se o servidor está rodando.');
+        }
+        
+        console.log('=== FIM DEBUG SALVAR RESENHA ===');
+    };
+}
+
+        // Botões de ação de empréstimo - VERSÃO COM DEBUG
         const solicitarBtn = document.getElementById('solicitarBtn');
         if (solicitarBtn) {
             solicitarBtn.onclick = async () => {
+                console.log('=== DEBUG SOLICITAÇÃO EMPRÉSTIMO ===');
+                console.log('BookId:', bookId, typeof bookId);
+                console.log('Usuário:', currentUser?.nome);
+                
                 try {
+                    // Primeiro verificar se ainda está autenticado
+                    const authCheck = await fetch('http://localhost:3000/api/profile', {
+                        credentials: 'include'
+                    });
+                    
+                    if (!authCheck.ok) {
+                        alert('Sessão expirada. Faça login novamente.');
+                        return;
+                    }
+                    
+                    console.log('Enviando solicitação de empréstimo...');
+                    
                     const response = await fetch('http://localhost:3000/api/loan/request', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
                         credentials: 'include',
                         body: JSON.stringify({ bookId: parseInt(bookId) })
                     });
-                    const message = await response.text();
-                    alert(message || 'Solicitação enviada!');
+                    
+                    console.log('Status da resposta:', response.status);
+                    
+                    const responseText = await response.text();
+                    console.log('Resposta do servidor:', responseText);
+                    
                     if (response.ok) {
+                        alert(responseText || 'Solicitação enviada com sucesso!');
                         renderBookDetails(container, bookId);
+                    } else {
+                        let errorMsg = responseText;
+                        if (response.status === 401) errorMsg = 'Você precisa estar logado';
+                        if (response.status === 400) errorMsg = 'Livro já está emprestado ou dados inválidos';
+                        if (response.status === 404) errorMsg = 'Livro não encontrado';
+                        if (response.status === 500) errorMsg = 'Erro interno do servidor';
+                        
+                        alert(`Erro (${response.status}): ${errorMsg}`);
                     }
                 } catch (error) {
-                    alert('Erro ao solicitar empréstimo.');
-                    console.error(error);
+                    console.error('Erro na requisição:', error);
+                    alert('Erro de conexão. Verifique se o servidor está rodando.');
                 }
             };
         }

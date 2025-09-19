@@ -1,30 +1,80 @@
 import { navigateTo } from '../main.js';
 
+function createPlaceholderSVG(title = 'Sem Capa') {
+    return `data:image/svg+xml;base64,${btoa(`
+        <svg width="150" height="210" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#9dadb7"/>
+            <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#ffffff" text-anchor="middle" dy=".3em">${title}</text>
+        </svg>
+    `)}`;
+}
+
 export async function renderBookList(container) {
     container.innerHTML = '';
 
     let books = [];
     try {
         console.log('Fazendo requisição para buscar livros...');
-        const response = await fetch('http://localhost:3000/api/books', {
-            credentials: 'include'
+        console.log('URL da requisição:', 'http://localhost:3000/api/books');
+        console.log('Cookies disponíveis:', document.cookie);
+        
+        let response = await fetch('http://localhost:3000/api/books', {
+            credentials: 'include',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
         });
         
         console.log('Status da resposta:', response.status);
+        console.log('Headers da resposta:', [...response.headers.entries()]);
+        
+        if (response.status === 401) {
+            console.warn('Tentativa com credentials falhou, tentando sem credentials...');
+            
+            response = await fetch('http://localhost:3000/api/books', {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            console.log('Status da segunda tentativa:', response.status);
+        }
         
         if (response.ok) {
             books = await response.json();
             console.log('Livros recebidos:', books);
             console.log('Número de livros:', books.length);
             
-            // Debug: mostrar estrutura do primeiro livro
             if (books.length > 0) {
                 console.log('Estrutura do primeiro livro:', books[0]);
                 console.log('Propriedades do primeiro livro:', Object.keys(books[0]));
             }
+        } else if (response.status === 401) {
+            const errorText = await response.text();
+            console.error('Erro de autenticação (401) persistente:', errorText);
+            
+            container.innerHTML = `
+                <div class="no-books" style="text-align: center; padding: 40px;">
+                    <h3>Acesso Negado</h3>
+                    <p>Você precisa fazer login para acessar os livros.</p>
+                    <button id="go-to-login" style="margin-top: 10px; padding: 8px 16px; background: #9bb4ff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        Fazer Login
+                    </button>
+                </div>
+            `;
+            
+            const loginBtn = container.querySelector('#go-to-login');
+            if (loginBtn && typeof navigateTo === 'function') {
+                loginBtn.addEventListener('click', () => {
+                    navigateTo('login');
+                });
+            }
+            return;
         } else {
             const errorText = await response.text();
-            console.error('Falha ao carregar livros:', response.statusText, errorText);
+            console.error('Falha ao carregar livros:', response.status, response.statusText, errorText);
             container.innerHTML = '<div class="no-books">Erro ao carregar a lista de livros.</div>';
             return;
         }
@@ -34,7 +84,6 @@ export async function renderBookList(container) {
         return;
     }
 
-    // Verificação adicional
     if (!Array.isArray(books)) {
         console.error('Resposta não é um array:', books);
         container.innerHTML = '<div class="no-books">Erro: dados dos livros inválidos.</div>';
@@ -47,7 +96,6 @@ export async function renderBookList(container) {
         return;
     }
 
-    // Container principal com as classes do seu design
     const mainEl = document.createElement('div');
     mainEl.innerHTML = `
         <div class="search-row">
@@ -65,7 +113,6 @@ export async function renderBookList(container) {
     function renderSections(allBooks) {
         console.log('Renderizando seções com', allBooks.length, 'livros');
         
-        // Limpar container
         booksContainer.innerHTML = '';
 
         if (allBooks.length === 0) {
@@ -73,12 +120,9 @@ export async function renderBookList(container) {
             return;
         }
 
-        // Agrupar livros por gênero
         const livrosPorGenero = allBooks.reduce((acc, book) => {
-            // Debug: verificar se o livro tem gênero
             console.log('Processando livro:', book.title, 'Gênero:', book.genre);
             
-            // Usar um gênero padrão se não houver
             const genero = book.genre || 'Sem Gênero';
             
             if (!acc[genero]) {
@@ -90,7 +134,6 @@ export async function renderBookList(container) {
 
         console.log('Livros agrupados por gênero:', livrosPorGenero);
 
-        // Renderizar cada gênero
         Object.entries(livrosPorGenero).forEach(([genero, livrosDoGenero]) => {
             console.log(`Renderizando gênero: ${genero} com ${livrosDoGenero.length} livros`);
             
@@ -113,34 +156,44 @@ export async function renderBookList(container) {
                 card.className = 'book-card';
                 card.setAttribute('data-book-id', book.id);
                 
-                // URL da imagem com fallback
-                const imageUrl = book.cover || 'https://via.placeholder.com/100x140/434E70/ffffff?text=' + encodeURIComponent(book.title?.substring(0, 10) || 'Livro');
+                const img = document.createElement('img');
+                img.alt = book.title || 'Livro';
                 
-                card.innerHTML = `
-                    <img src="${imageUrl}" 
-                         alt="${book.title || 'Livro'}" 
-                         onerror="this.src='https://via.placeholder.com/100x140/9dadb7/ffffff?text=Sem+Capa'">
-                    <div class="book-title">
-                        ${book.title || 'Título não disponível'}
-                    </div>
-                    <div class="book-author">
-                        ${book.author || 'Autor desconhecido'}
-                    </div>
-                `;
+                const handleImageError = () => {
+                    console.log('Erro ao carregar imagem para:', book.title, 'Usando placeholder SVG');
+                    img.src = createPlaceholderSVG('Sem Capa');
+                    img.removeEventListener('error', handleImageError);
+                };
                 
-                // Event listener melhorado para navegação
+                if (book.cover && book.cover.trim() !== '') {
+                    img.src = book.cover;
+                    img.addEventListener('error', handleImageError, { once: true });
+                } else {
+                    img.src = createPlaceholderSVG('Sem Capa');
+                }
+                
+                const bookTitle = document.createElement('div');
+                bookTitle.className = 'book-title';
+                bookTitle.textContent = book.title || 'Título não disponível';
+                
+                const bookAuthor = document.createElement('div');
+                bookAuthor.className = 'book-author';
+                bookAuthor.textContent = book.author || 'Autor desconhecido';
+                
+                card.appendChild(img);
+                card.appendChild(bookTitle);
+                card.appendChild(bookAuthor);
+                
                 card.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     const bookId = parseInt(card.getAttribute('data-book-id'));
                     console.log('Clicando no livro:', bookId, book.title);
                     
-                    // Verificar se navigateTo está disponível
                     if (typeof navigateTo === 'function') {
                         navigateTo('details', { bookId: bookId });
                     } else {
                         console.error('Função navigateTo não está disponível');
-                        // Fallback: tentar navegar diretamente
                         window.location.hash = `#details/${bookId}`;
                     }
                 });
@@ -154,10 +207,8 @@ export async function renderBookList(container) {
         });
     }
 
-    // Renderizar inicialmente
     renderSections(books);
 
-    // Função de busca
     function doSearch() {
         const q = (searchInput.value || '').trim().toLowerCase();
         console.log('Fazendo busca por:', q);
@@ -176,7 +227,6 @@ export async function renderBookList(container) {
         }
     }
 
-    // Event listeners para busca
     searchInput.addEventListener('input', doSearch);
     searchClear.addEventListener('click', () => {
         searchInput.value = '';
@@ -184,13 +234,11 @@ export async function renderBookList(container) {
         searchInput.focus();
     });
 
-    // Adicionar evento de Enter para busca
     searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             doSearch();
         }
     });
 
-    // Debug final
     console.log('renderBookList concluído. Total de livros:', books.length);
 }

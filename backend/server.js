@@ -478,113 +478,190 @@ app.post('/api/loan/request-return', isAuthenticated, async (req, res) => {
 // ================================
 // ROTAS DE RESENHAS
 // ================================
-
-app.get('/api/reviews/:bookId', async (req, res) => {
-    const { bookId } = req.params;
+// Função auxiliar para converter data para formato MySQL
+function formatDateForMySQL(dateInput) {
+    let date;
     
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        const [rows] = await connection.execute(`
-            SELECT r.*, u.nome as user 
-            FROM resenhas r 
-            JOIN usuarios u ON r.cpf = u.cpf 
-            WHERE r.bookId = ? 
-            ORDER BY r.date DESC
-        `, [bookId]);
-        
-        res.json(rows);
-        
-    } catch (error) {
-        console.error('Erro ao buscar resenhas:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
+    if (!dateInput) {
+        // Se não há data, usar data atual
+        date = new Date();
+    } else if (dateInput instanceof Date) {
+        // Se já é um objeto Date
+        date = dateInput;
+    } else if (typeof dateInput === 'string') {
+        // Se é uma string, tentar diferentes formatos
+        if (dateInput.includes('/')) {
+            // Formato brasileiro: "19/09/2025, 16:40" ou "19/09/2025"
+            const parts = dateInput.split(', ');
+            const datePart = parts[0]; // "19/09/2025"
+            const timePart = parts[1] || '00:00'; // "16:40" ou padrão
+            
+            const [day, month, year] = datePart.split('/');
+            const [hour, minute] = timePart.split(':');
+            
+            date = new Date(year, month - 1, day, hour || 0, minute || 0);
+        } else {
+            // Tentar parse direto
+            date = new Date(dateInput);
+        }
+    } else {
+        // Fallback para data atual
+        date = new Date();
     }
-});
+    
+    // Verificar se a data é válida
+    if (isNaN(date.getTime())) {
+        date = new Date(); // Usar data atual se inválida
+    }
+    
+    // Converter para formato MySQL: YYYY-MM-DD HH:MM:SS
+    return date.toISOString().slice(0, 19).replace('T', ' ');
+}
 
+// ROTA CORRIGIDA PARA ADICIONAR RESENHAS
 app.post('/api/reviews', isAuthenticated, async (req, res) => {
     const { bookId, text, rating, date } = req.body;
     const userCpf = req.session.user.cpf;
+    
+    console.log('Dados recebidos para resenha:', { bookId, text, rating, date, userCpf });
     
     if (!bookId || !rating) {
         return res.status(400).json({ error: 'BookId e rating são obrigatórios' });
     }
     
+    // Validar rating
+    const ratingNum = parseInt(rating);
+    if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+        return res.status(400).json({ error: 'Rating deve ser um número entre 1 e 5' });
+    }
+    
     let connection;
     try {
         connection = await pool.getConnection();
+        
+        // Formatar a data corretamente
+        const formattedDate = formatDateForMySQL(date);
+        console.log('Data formatada para MySQL:', formattedDate);
         
         await connection.execute(`
             INSERT INTO resenhas (bookId, cpf, rating, text, date) 
             VALUES (?, ?, ?, ?, ?)
-        `, [bookId, userCpf, rating, text || '', date || new Date()]);
+        `, [bookId, userCpf, ratingNum, text || '', formattedDate]);
         
-        res.status(200).send('Resenha adicionada com sucesso!');
+        console.log('Resenha salva com sucesso');
+        res.status(200).json({ message: 'Resenha adicionada com sucesso!' });
         
     } catch (error) {
         console.error('Erro ao adicionar resenha:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     } finally {
         if (connection) connection.release();
     }
 });
 
-app.put('/api/reviews/:id', isAuthenticated, async (req, res) => {
-    const { id } = req.params;
-    const { text, rating, date } = req.body;
-    const userCpf = req.session.user.cpf;
+// Substitua a rota POST /api/reviews no server.js por esta versão com debug completo:
+
+app.post('/api/reviews', isAuthenticated, async (req, res) => {
+    console.log('=== DEBUG SERVIDOR - RECEBENDO RESENHA ===');
+    console.log('Headers da requisição:', req.headers);
+    console.log('Corpo da requisição (req.body):', req.body);
+    console.log('Sessão do usuário:', req.session.user);
+    
+    const { bookId, text, rating } = req.body;
+    const userCpf = req.session?.user?.cpf;
+    
+    console.log('Dados extraídos:', { bookId, text, rating, userCpf });
+    
+    // Verificações básicas
+    if (!userCpf) {
+        console.log('ERRO: Usuário não encontrado na sessão');
+        return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+    
+    if (!bookId) {
+        console.log('ERRO: bookId ausente');
+        return res.status(400).json({ error: 'BookId é obrigatório' });
+    }
+    
+    if (!rating) {
+        console.log('ERRO: rating ausente');
+        return res.status(400).json({ error: 'Rating é obrigatório' });
+    }
+    
+    // Validar rating
+    const ratingNum = parseInt(rating);
+    console.log('Rating convertido:', ratingNum);
+    
+    if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+        console.log('ERRO: rating inválido');
+        return res.status(400).json({ error: 'Rating deve ser um número entre 1 e 5' });
+    }
     
     let connection;
     try {
+        console.log('Tentando conectar ao banco de dados...');
         connection = await pool.getConnection();
+        console.log('Conexão com banco estabelecida');
+        
+        // Verificar se o livro existe
+        console.log('Verificando se livro existe...');
+        const [bookCheck] = await connection.execute('SELECT id FROM livros WHERE id = ?', [bookId]);
+        console.log('Resultado verificação livro:', bookCheck);
+        
+        if (bookCheck.length === 0) {
+            console.log('ERRO: Livro não encontrado');
+            return res.status(404).json({ error: 'Livro não encontrado' });
+        }
+        
+        // Verificar se usuário já tem resenha para este livro
+        console.log('Verificando resenhas existentes...');
+        const [existingReview] = await connection.execute(
+            'SELECT id FROM resenhas WHERE bookId = ? AND cpf = ?', 
+            [bookId, userCpf]
+        );
+        console.log('Resenhas existentes:', existingReview);
+        
+        if (existingReview.length > 0) {
+            console.log('AVISO: Usuário já tem resenha para este livro');
+            return res.status(400).json({ error: 'Você já avaliou este livro' });
+        }
+        
+        console.log('Inserindo resenha no banco...');
+        console.log('Parâmetros da query:', [bookId, userCpf, ratingNum, text || '']);
         
         const [result] = await connection.execute(`
-            UPDATE resenhas 
-            SET text = ?, rating = ?, date = ? 
-            WHERE id = ? AND cpf = ?
-        `, [text, rating, date, id, userCpf]);
+            INSERT INTO resenhas (bookId, cpf, rating, text, date) 
+            VALUES (?, ?, ?, ?, NOW())
+        `, [bookId, userCpf, ratingNum, text || '']);
         
-        if (result.affectedRows > 0) {
-            res.status(200).send('Resenha atualizada com sucesso!');
-        } else {
-            res.status(404).json({ error: 'Resenha não encontrada' });
-        }
+        console.log('Resultado da inserção:', result);
+        console.log('ID da resenha inserida:', result.insertId);
+        
+        console.log('Resenha salva com sucesso!');
+        res.status(200).json({ message: 'Resenha adicionada com sucesso!' });
         
     } catch (error) {
-        console.error('Erro ao atualizar resenha:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.error('ERRO DETALHADO NO SERVIDOR:', error);
+        console.error('Stack trace:', error.stack);
+        console.error('Código do erro:', error.code);
+        console.error('SQL State:', error.sqlState);
+        console.error('SQL Message:', error.sqlMessage);
+        
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     } finally {
-        if (connection) connection.release();
+        if (connection) {
+            console.log('Liberando conexão com banco');
+            connection.release();
+        }
     }
-});
-
-app.delete('/api/reviews/:id', isAuthenticated, async (req, res) => {
-    const { id } = req.params;
-    const userCpf = req.session.user.cpf;
     
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        const [result] = await connection.execute(
-            'DELETE FROM resenhas WHERE id = ? AND cpf = ?', 
-            [id, userCpf]
-        );
-        
-        if (result.affectedRows > 0) {
-            res.status(200).send('Resenha excluída com sucesso!');
-        } else {
-            res.status(404).json({ error: 'Resenha não encontrada' });
-        }
-        
-    } catch (error) {
-        console.error('Erro ao excluir resenha:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
+    console.log('=== FIM DEBUG SERVIDOR ===');
 });
 
 // ================================
