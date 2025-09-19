@@ -1,3 +1,4 @@
+/* Variáveis de cores do projeto */
 :root {
   --azul-escuro: #212738;
   --azul-original: #434E70;
@@ -27,13 +28,13 @@ body {
 /* Header */
 .shell-header {
   display: flex;
-  justify-content: space-between; /* espaça esquerda/centro/direita */
+  justify-content: space-between;
   align-items: center;
   padding: 0 16px;
-  height: 100px; /* altura máxima */
+  height: 100px;
   max-height: 100px;
   background: var(--branco);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
   position: fixed;
   top: 0;
   width: 100%;
@@ -41,14 +42,16 @@ body {
   margin-bottom: 0;
 }
 
-.header-left, .header-center, .header-right {
+.header-left,
+.header-center,
+.header-right {
   display: flex;
   align-items: center;
 }
 
 .header-left {
   flex: 0 0 auto;
-  margin-left: 0px; /* distancia do avatar da borda esquerda */
+  margin-left: 0px;
 }
 
 .header-center {
@@ -56,10 +59,9 @@ body {
   justify-content: center;
 }
 
-
 .header-right {
   flex: 0 0 auto;
-  margin-right: 32px; /* distancia do botão da borda direita */
+  margin-right: 32px;
 }
 
 /* Avatar do usuário à esquerda */
@@ -79,15 +81,6 @@ body {
 }
 
 /* Botão de menu à direita */
-.menu-btn {
-  font-size: 24px;
-  background: var(--azul-escuro);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 12px;
-  cursor: pointer;
-}
 .menu-btn {
   font-size: 24px;
   background: var(--azul-escuro);
@@ -142,7 +135,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0, 0, 0, 0.5);
   z-index: 1003;
   display: none;
 }
@@ -160,7 +153,7 @@ body {
   display: flex;
   justify-content: space-around;
   padding: 0.5rem 0;
-  box-shadow: 0 -1px 5px rgba(0,0,0,0.1);
+  box-shadow: 0 -1px 5px rgba(0, 0, 0, 0.1);
   z-index: 100;
 }
 
@@ -185,12 +178,12 @@ body {
 
 /* Conteúdo principal */
 .content {
-  margin-top: 90px; /* altura do header + um espaçamento */
+  margin-top: 90px;
   padding: 12px;
   overflow-y: auto;
 }
 
-/* Dashboard e cards de livros */
+/* Dashboard e cards de livros (mantido para compatibilidade) */
 .livros-grid {
   display: flex;
   gap: 10px;
@@ -212,7 +205,8 @@ body {
   display: block;
 }
 
-h1, h2 {
+h1,
+h2 {
   color: var(--azul-escuro);
   margin-left: 1rem;
 }
@@ -230,7 +224,7 @@ ul li {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   font-size: 14px;
 }
 
@@ -244,7 +238,8 @@ ul li em {
 }
 
 /* Botões */
-.btn-devolver, .btn {
+.btn-devolver,
+.btn {
   background-color: var(--azul-escuro);
   color: #fff;
   border: none;
@@ -255,8 +250,32 @@ ul li em {
   transition: background 0.3s;
 }
 
-.btn-devolver:hover, .btn:hover {
+.btn-devolver:hover,
+.btn:hover {
   background-color: var(--azul-original);
+}
+
+/* Botões secundários */
+.btn-secondary {
+  background-color: var(--azul-claro);
+  color: var(--azul-escuro);
+}
+
+.btn-secondary:hover {
+  background-color: var(--cinza-escuro);
+}
+
+.btn-small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
 }
 
 /* Scroll dentro do conteúdo */
@@ -273,47 +292,381 @@ ul li em {
   background-color: var(--cinza-claro);
 }
 
+/* ===========================================
+   NOVOS ESTILOS PARA O CARROSSEL DE LIVROS
+   =========================================== */
+
+/* Barra de busca aprimorada */
 .search-row {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
+  background: var(--branco);
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 #search-input {
-  flex: 1; /* ocupa a maior parte da linha */
-  padding: 10px 16px; /* mais espaçamento interno */
+  flex: 1;
+  padding: 12px 16px;
   font-size: 16px;
-  border-radius: 20px; /* bordas arredondadas */
-  border: 1px solid #ccc;
+  border-radius: 20px;
+  border: 1px solid var(--cinza-escuro);
   outline: none;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  background: var(--branco);
+  color: var(--azul-escuro);
 }
 
 #search-input:focus {
-  border-color: #9bb4ff;
-  box-shadow: 0 2px 6px rgba(155,180,255,0.3);
+  border-color: var(--azul-original);
+  box-shadow: 0 0 0 3px rgba(67, 78, 112, 0.1);
 }
 
 #search-clear {
-  padding: 0 12px;
-  border-radius: 50%;
+  padding: 8px 15px;
+  border-radius: 20px;
   border: none;
-  background: #ff6b6b;
+  background: #dc3545;
   color: #fff;
   cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+#search-clear:hover {
+  background-color: #c82333;
+}
+
+/* Seções de gênero */
+.genre-section {
+  margin-bottom: 30px;
+}
+
+.genre-title {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 15px;
+  color: var(--azul-escuro);
+  border-left: 4px solid var(--azul-original);
+  padding-left: 12px;
+  background: var(--branco);
+  padding: 10px 12px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Carrossel horizontal funcional */
+.books-carousel {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 10px 5px 15px 5px;
+  scroll-behavior: smooth;
+  
+  /* Scrollbar personalizada com as cores do projeto */
+  scrollbar-width: thin;
+  scrollbar-color: var(--azul-original) var(--cinza-claro);
+}
+
+.books-carousel::-webkit-scrollbar {
+  height: 8px;
+}
+
+.books-carousel::-webkit-scrollbar-track {
+  background: var(--cinza-claro);
+  border-radius: 10px;
+}
+
+.books-carousel::-webkit-scrollbar-thumb {
+  background: var(--azul-original);
+  border-radius: 10px;
+}
+
+.books-carousel::-webkit-scrollbar-thumb:hover {
+  background: var(--azul-escuro);
+}
+
+/* Cards dos livros no carrossel */
+.book-card {
+  flex: 0 0 auto;
+  width: 110px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid var(--cinza-escuro);
+  border-radius: 12px;
+  padding: 8px;
+  background-color: var(--branco);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.book-card:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 8px 20px rgba(67, 78, 112, 0.3);
+  border-color: var(--azul-original);
+}
+
+.book-card img {
+  width: 100px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.book-title {
+  font-size: 12px;
+  text-align: center;
+  font-weight: bold;
+  color: var(--azul-escuro);
+  margin-bottom: 4px;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.book-author {
+  font-size: 11px;
+  text-align: center;
+  color: var(--azul-claro);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+/* Estados vazios e loading */
+.no-books {
+  text-align: center;
+  padding: 40px;
+  color: var(--azul-claro);
+  background: var(--branco);
+  border-radius: 12px;
+  margin: 20px 0;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--azul-claro);
+  background: var(--branco);
+  border-radius: 12px;
+  margin: 20px 0;
+}
+
+.loading::after {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--cinza-claro);
+  border-top: 2px solid var(--azul-original);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-left: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ===========================================
+   ESTILOS PARA PÁGINA DE DETALHES DO LIVRO
+   =========================================== */
+
+.book-details {
+  background: var(--branco);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 10px 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.book-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.book-cover-large {
+  width: 150px;
+  height: 210px;
+  object-fit: cover;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.book-info {
+  flex: 1;
+}
+
+.book-info h2 {
+  margin: 0 0 10px 0;
+  color: var(--azul-escuro);
+  font-size: 24px;
+}
+
+.book-info p {
+  margin: 5px 0;
+  color: var(--azul-claro);
   font-size: 16px;
+}
+
+/* Seção de avaliações */
+.avg-rating {
+  margin: 15px 0;
+  font-weight: bold;
+  font-size: 16px;
+  color: var(--azul-escuro);
+  text-align: center;
+  background: var(--cinza-claro);
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.review-section {
+  margin: 20px 0;
+}
+
+.review-section h3 {
+  color: var(--azul-escuro);
+  margin-bottom: 10px;
+}
+
+.review-card {
+  background: var(--cinza-claro);
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 8px;
+  border-left: 4px solid var(--azul-original);
+}
+
+.review-card strong {
+  color: var(--azul-escuro);
+  display: block;
+  margin-bottom: 5px;
+}
+
+.stars-display {
+  margin: 5px 0;
+}
+
+.stars-display .star {
+  color: #ccc;
+  font-size: 16px;
+}
+
+.stars-display .star.filled {
+  color: #f5b301;
+}
+
+/* Input de avaliação */
+.rating-input {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+.rating-input .star {
+  cursor: pointer;
+  font-size: 28px;
+  color: #ccc;
+  transition: color 0.2s ease;
+  margin: 0 2px;
+}
+
+.rating-input .star.filled {
+  color: #f5b301;
+}
+
+.rating-input .star:hover {
+  color: #f5b301;
+}
+
+/* Textarea para resenha */
+#reviewText {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--cinza-escuro);
+  border-radius: 8px;
+  resize: vertical;
+  font-family: Arial, sans-serif;
+  margin: 10px 0;
+}
+
+/* Seção de status e ações */
+.loan-reserve-section,
+.synopsis-section,
+.shelf-options {
+  margin: 20px 0;
+  padding: 15px;
+  background: var(--cinza-claro);
+  border-radius: 8px;
+}
+
+.loan-reserve-section h3,
+.synopsis-section h3,
+.shelf-options h3 {
+  color: var(--azul-escuro);
+  margin-bottom: 10px;
+}
+
+.synopsis-section .hidden {
+  display: none;
+}
+
+/* Modal */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 2000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+  background-color: var(--branco);
+  margin: 15% auto;
+  padding: 20px;
+  border-radius: 12px;
+  width: 80%;
+  max-width: 500px;
+  position: relative;
+}
+
+.close-btn {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+  color: var(--azul-claro);
+}
+
+.close-btn:hover {
+  color: var(--azul-escuro);
 }
 
 /* Fundo do perfil */
 .containerFundoPerfil {
   width: 100%;
-  height: 280px; /* ajuste como quiser */
-  background-image: url('${fundoTopoPerfil}');
+  height: 280px;
   background-size: cover;
   background-position: center;
   display: flex;
-  justify-content: center; /* centraliza avatar horizontalmente */
-  align-items: center;     /* centraliza avatar verticalmente */
+  justify-content: center;
+  align-items: center;
   position: relative;
 }
 
@@ -324,15 +677,15 @@ ul li em {
   border-radius: 50%;
   object-fit: cover;
   border: 4px solid #fff;
-  z-index: 2; /* garante que fique acima do fundo */
+  z-index: 2;
 }
 
 /* Botão de editar avatar */
 .avatar-edit {
   position: absolute;
   bottom: 10px;
-  right: calc(50% - 60px); /* centraliza relativo ao avatar */
-  background: rgba(0,0,0,0.6);
+  right: calc(50% - 60px);
+  background: rgba(0, 0, 0, 0.6);
   color: #fff;
   border-radius: 50%;
   width: 28px;
@@ -353,93 +706,44 @@ ul li em {
 }
 
 .profile-header-container {
-  display: flex; 
-  flex-direction: column; /* vertical: fundo -> avatar -> info */ 
-  align-items: center; 
-  gap: 16px; 
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
 }
 
-.rating-input {
-  display: inline-flex;
-  flex-direction: row; /* normal, esquerda → direita */
-}
-
-.rating-input .star {
-  cursor: pointer;
-  font-size: 28px;
-  color: #ccc;
-  transition: color 0.2s ease;
-}
-
-/* Hover pinta da estrela atual pra esquerda */
-.rating-input .star:hover,
-.rating-input .star:hover ~ .star {
-  color: #ccc; /* apaga as da direita */
-}
-
-.rating-input .star:hover,
-.rating-input .star:hover ~ .star {
-  color: #ccc;
-}
-
-.rating-input .star:hover,
-.rating-input .star:hover ~ .star {
-  color: #ccc;
-}
-
-.rating-input .star:hover,
-.rating-input .star:hover ~ .star {
-  color: #ccc;
-}
-
-.star.filled,
-.rating-input .star:hover,
-.rating-input .star:hover ~ .star {
-  color: #f5b301; /* amarelo nas selecionadas */
-}
-
-
-.star.filled {
-  color: #f5b301; /* amarelo dourado */
-}
-
-.rating-input .star {
-  cursor: pointer;
-}
-
-.rating-input .star:hover,
-.rating-input .star:hover ~ .star {
-  color: #f5b301; /* destaque no hover */
-}
-
-/* ===========================
-   Seção de avaliações
-   =========================== */
-.avg-rating {
-  margin: 10px 0;
-  font-weight: bold;
-  font-size: 16px;
-  color: #333;
-}
-
-.review-card {
-  background: #f9f9f9;
-  padding: 10px;
-  margin: 8px 0;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.review-card.self-review {
-  border: 2px solid #4caf50; /* destaque verde para a resenha do próprio usuário */
-}
-
-.review-card strong {
-  display: block;
-  font-size: 14px;
-  margin-bottom: 4px;
-}
-
-.stars-display {
-  margin: 4px 0;
+/* Responsividade */
+@media (max-width: 768px) {
+  .book-header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .book-cover-large {
+    width: 120px;
+    height: 168px;
+  }
+  
+  .genre-title {
+    font-size: 18px;
+  }
+  
+  .book-card {
+    width: 90px;
+  }
+  
+  .book-card img {
+    width: 80px;
+    height: 120px;
+  }
+  
+  .search-row {
+    padding: 10px;
+  }
+  
+  .modal-content {
+    width: 95%;
+    margin: 10% auto;
+  }
 }

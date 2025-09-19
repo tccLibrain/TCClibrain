@@ -15,14 +15,20 @@ export async function initApp() {
         const response = await fetch('http://localhost:3000/api/profile', {
             credentials: 'include'
         });
+        
+        // CORREÇÃO: Verifica se a resposta foi 'ok' (status 200-299) antes de processá-la.
         if (response.ok) {
             const user = await response.json();
-            navigateTo(user.tipo === 'admin' ? 'admin' : 'books', user);
+            // Navega para o painel de admin ou para a lista de livros, passando o usuário.
+            navigateTo(user.tipo === 'admin' ? 'admin' : 'books', { user });
         } else {
+            // Se a resposta não for 'ok', significa que não há sessão.
+            // A navegação vai direto para a tela de login.
             navigateTo('login');
         }
     } catch (error) {
         console.error('Erro na inicialização da aplicação:', error);
+        // Em caso de qualquer erro, como falha de conexão, navega para o login.
         navigateTo('login');
     }
 }

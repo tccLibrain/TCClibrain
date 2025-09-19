@@ -5,7 +5,6 @@ import { navigateTo } from '../main.js';
 
 // Validação oficial do CPF
 function validarCPF(cpf) {
-    cpf = cpf.replace(/[^\d]+/g, '');
     if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
 
     let soma = 0;
@@ -35,96 +34,134 @@ function validarSenha(senha) {
     return senha.length >= 8;
 }
 
+// Função para injetar o CSS no <head> uma única vez
+function injectCSS() {
+    if (document.getElementById('user-registration-styles')) {
+        return; // O CSS já foi injetado, não faça nada
+    }
+
+    const style = document.createElement('style');
+    style.id = 'user-registration-styles';
+    style.innerHTML = `
+        .containerCadastro {
+            background-repeat: no-repeat;
+            display: flex;
+            width: 100%;
+            height: 280px;
+        }
+        .containerCadastro img {
+            margin-top: 22px;
+        }
+        .cadastro {
+            margin-top: 40px;
+            color: #fff;
+            font-family: arial black;
+            font-size: 220%;
+        }
+        .centro {
+            display: flex;
+            justify-content: center;
+        }
+        .error-message {
+            color: #ff6b6b;
+            font-size: 0.9rem;
+            margin-top: -8px;
+            margin-bottom: 8px;
+        }
+        #registration-step1 {
+            margin-top: 0px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 300px;
+            margin: auto;
+        }
+        #registration-step1 input[type="text"],
+        #registration-step1 input[type="password"],
+        #registration-step1 input[type="date"] {
+            background-color: #CFD2DB;
+            color: #434E70;
+            border: none;
+            border-radius: 999px;
+            padding: 12px 20px;
+            font-family: arial black;
+            font-size: 16px;
+            text-align: center;
+            outline: none;
+            margin-bottom: 10px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .input-estilizado::placeholder {
+            color: #5e3366;
+            opacity: 0.7;
+        }
+        #registration-step1 button {
+            background-color: #9bb4ff;
+            color: #fff;
+            border: none;
+            border-radius: 999px;
+            padding: 12px 20px;
+            font-family: arial black;
+            font-size: 16px;
+            text-align: center;
+            outline: none;
+            margin-bottom: 10px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .conta {
+            display: flex;
+            text-align: center;
+            justify-content: center;
+            margin-top: 50px;
+            color: #fff;
+            font-family: arial black;
+            font-size: 80%;
+        }
+        form {
+            max-width: 400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        label {
+            font-weight: bold;
+        }
+        input,
+        select {
+            padding: 8px;
+            border-radius: 8px;
+            border: none;
+            font-size: 1rem;
+        }
+        button {
+            background-color: #9bb4ff;
+            color: white;
+            border: none;
+            border-radius: 999px;
+            padding: 12px 20px;
+            font-family: arial black;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #btn-voltar {
+            background-color: #9bb4ff;
+            margin-top: 10px;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 export function renderUserRegistration(container) {
+    injectCSS();
+
     container.innerHTML = `
-        <style>
-            .containerCadastro {
-                background-image: url('${folhaLogin}');
-                background-repeat: no-repeat;
-                display: flex;
-                width: 100%;
-                height: 280px;
-            }
-            .containerCadastro img {
-                margin-top: 22px;
-            }
-            .cadastro {
-                margin-top: 40px;
-                color: #fff;
-                font-family: arial black;
-                font-size: 220%;
-            }
-            .centro {
-                display: flex;
-                justify-content: center;
-            }
-
-            .error-message {
-                color: #ff6b6b;
-                font-size: 0.9rem;
-                margin-top: -8px;
-                margin-bottom: 8px;
-            }
-
-            #registration-step1 {
-                margin-top: 0px;
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-                width: 100%;
-                max-width: 300px;
-                margin: auto;
-            }
-
-            #registration-step1 input[type="text"],
-            #registration-step1 input[type="password"],
-            #registration-step1 input[type="date"] {
-                background-color: #CFD2DB;
-                color: #434E70;
-                border: none;
-                border-radius: 999px;
-                padding: 12px 20px;
-                font-family: arial black;
-                font-size: 16px;
-                text-align: center;
-                outline: none;
-                margin-bottom: 10px;
-                width: 100%;
-                box-sizing: border-box;
-            }
-
-            .input-estilizado::placeholder {
-                color: #5e3366;
-                opacity: 0.7;
-            }
-
-            #registration-step1 button {
-                background-color: #9bb4ff;
-                color: #fff;
-                border: none;
-                border-radius: 999px;
-                padding: 12px 20px;
-                font-family: arial black;
-                font-size: 16px;
-                text-align: center;
-                outline: none;
-                margin-bottom: 10px;
-                width: 100%;
-                box-sizing: border-box;
-            }
-
-            .conta {
-                display: flex;
-                text-align: center;
-                justify-content: center;
-                margin-top: 50px;
-                color: #fff;
-                font-family: arial black;
-                font-size: 80%;
-            }
-        </style>
-
-        <div class='containerCadastro centro'>
+        <div class='containerCadastro centro' style="background-image: url('${folhaLogin}');">
             <img src="${logo_librain_T}" alt="Logo" height='200px' width='200px'>
         </div>
 
@@ -225,45 +262,6 @@ export function renderUserRegistration(container) {
 
 function renderUserRegistrationStep2(container, step1Data) {
     container.innerHTML = `
-        <style>
-            form {
-                max-width: 400px;
-                margin: 0 auto;
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-                color: #fff;
-                font-family: Arial, sans-serif;
-            }
-            label { font-weight: bold; }
-            input, select {
-                padding: 8px;
-                border-radius: 8px;
-                border: none;
-                font-size: 1rem;
-            }
-            .error-message {
-                color: #ff6b6b;
-                font-size: 0.9rem;
-                margin-top: -8px;
-                margin-bottom: 8px;
-            }
-            button {
-                background-color: #9bb4ff;
-                color: white;
-                border: none;
-                border-radius: 999px;
-                padding: 12px 20px;
-                font-family: arial black;
-                font-size: 16px;
-                cursor: pointer;
-            }
-            #btn-voltar {
-                background-color: #9bb4ff;
-                margin-top: 10px;
-            }
-        </style>
-
         <h1>Cadastro - Etapa 2</h1>
         <form id="registration-step2" novalidate>
             <label for="email">Email</label>
@@ -327,7 +325,7 @@ function renderUserRegistrationStep2(container, step1Data) {
         renderUserRegistration(container);
     };
 
-    formStep2.onsubmit = (e) => {
+    formStep2.onsubmit = async (e) => {
         e.preventDefault();
 
         ['email', 'genero', 'tel_residencial', 'tel_comercial', 'identidade', 'endereco', 'numero', 'cep', 'cidade', 'estado']
@@ -413,28 +411,43 @@ function renderUserRegistrationStep2(container, step1Data) {
             estado
         };
 
-        const apiUrl = 'http://localhost:3000/api/register';
-
-        fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(finalData)
-        })
-        .then(response => {
+        try {
+            const apiUrl = 'http://localhost:3000/api/register';
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(finalData)
+            });
+        
+            // Lida com respostas que não foram bem-sucedidas (por exemplo, status 400 ou 500)
             if (!response.ok) {
-                return response.text().then(text => { throw new Error(text) });
+                let errorMessage = 'Erro desconhecido no cadastro.';
+                try {
+                    // Tenta analisar a mensagem de erro como JSON
+                    const errorData = await response.json();
+                    if (errorData.message) {
+                        errorMessage = errorData.message;
+                    } else if (errorData.error) {
+                        errorMessage = errorData.error;
+                    }
+                } catch (jsonError) {
+                    // Se a análise JSON falhar, obtém o erro como texto simples
+                    errorMessage = await response.text();
+                }
+                alert(errorMessage);
+                return; // Interrompe a execução para evitar que as próximas linhas sejam executadas
             }
-            return response.text();
-        })
-        .then(message => {
-            alert(message);
+        
+            // Lida com a resposta bem-sucedida
+            const result = await response.json();
+            alert(result.message);
             navigateTo('login');
-        })
-        .catch(error => {
-            console.error('Erro de cadastro:', error);
-            alert(error.message);
-        });
+        
+        } catch (networkError) {
+            console.error('Erro de rede ou de conexão:', networkError);
+            alert('Erro de rede ou de conexão. Por favor, tente novamente.');
+        }
     }
 }

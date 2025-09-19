@@ -102,8 +102,6 @@ export function renderLoginPage(container) {
     <form id="login-form">
       <input type="text" name="cpf" placeholder="CPF" required />
       <input type="password" name="senha" placeholder="Senha" required />
-      <label><input type="radio" name="tipo" value="leitor" checked /> Leitor</label>
-      <label><input type="radio" name="tipo" value="admin" /> Administrador</label>
       <button type="submit">Entrar</button>
     </form>
 
@@ -120,13 +118,9 @@ export function renderLoginPage(container) {
     e.preventDefault();
     console.log('Botão de login clicado!');
 
-    // AQUI ESTÁ A CORREÇÃO: Pega o valor do botão de rádio marcado
-    const tipo = form.querySelector('input[name="tipo"]:checked').value;
-
     const data = {
       cpf: cpfInput.value,
-      senha: senhaInput.value,
-      tipo: tipo
+      senha: senhaInput.value
     };
 
     try {
