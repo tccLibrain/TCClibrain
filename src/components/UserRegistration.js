@@ -24,11 +24,6 @@ function validarCPF(cpf) {
     return resto === parseInt(cpf.charAt(10));
 }
 
-// Validação telefone - exatamente 11 dígitos (DDD + número)
-function validarTelefone(numero) {
-    return numero.replace(/\D/g, '').length === 11;
-}
-
 // Validação de senha forte
 function validarSenha(senha) {
     return senha.length >= 8;
@@ -37,7 +32,7 @@ function validarSenha(senha) {
 // Função para injetar o CSS no <head> uma única vez
 function injectCSS() {
     if (document.getElementById('user-registration-styles')) {
-        return; // O CSS já foi injetado, não faça nada
+        return;
     }
 
     const style = document.createElement('style');
@@ -49,26 +44,32 @@ function injectCSS() {
             width: 100%;
             height: 280px;
         }
+        
         .containerCadastro img {
             margin-top: 22px;
         }
+        
         .cadastro {
             margin-top: 40px;
             color: #fff;
             font-family: arial black;
             font-size: 220%;
         }
+        
         .centro {
             display: flex;
             justify-content: center;
         }
+        
         .error-message {
             color: #ff6b6b;
             font-size: 0.9rem;
             margin-top: -8px;
             margin-bottom: 8px;
+            text-align: center;
         }
-        #registration-step1 {
+        
+        .registration-form {
             margin-top: 0px;
             display: flex;
             flex-direction: column;
@@ -77,9 +78,12 @@ function injectCSS() {
             max-width: 300px;
             margin: auto;
         }
-        #registration-step1 input[type="text"],
-        #registration-step1 input[type="password"],
-        #registration-step1 input[type="date"] {
+        
+        .registration-form input[type="text"],
+        .registration-form input[type="password"],
+        .registration-form input[type="date"],
+        .registration-form input[type="email"],
+        .registration-form select {
             background-color: #CFD2DB;
             color: #434E70;
             border: none;
@@ -93,11 +97,13 @@ function injectCSS() {
             width: 100%;
             box-sizing: border-box;
         }
-        .input-estilizado::placeholder {
+        
+        .registration-form input::placeholder {
             color: #5e3366;
             opacity: 0.7;
         }
-        #registration-step1 button {
+        
+        .registration-form button {
             background-color: #9bb4ff;
             color: #fff;
             border: none;
@@ -110,7 +116,22 @@ function injectCSS() {
             margin-bottom: 10px;
             width: 100%;
             box-sizing: border-box;
+            cursor: pointer;
         }
+        
+        .registration-form button:hover {
+            background-color: #8aa3f0;
+        }
+        
+        .btn-voltar {
+            background-color: #6c757d !important;
+            margin-top: 10px;
+        }
+        
+        .btn-voltar:hover {
+            background-color: #5a6268 !important;
+        }
+        
         .conta {
             display: flex;
             text-align: center;
@@ -120,38 +141,37 @@ function injectCSS() {
             font-family: arial black;
             font-size: 80%;
         }
-        form {
-            max-width: 400px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+        
+        a:link, a:visited {
             color: #fff;
-            font-family: Arial, sans-serif;
+            text-decoration: none;
         }
-        label {
-            font-weight: bold;
-        }
-        input,
-        select {
-            padding: 8px;
-            border-radius: 8px;
-            border: none;
-            font-size: 1rem;
-        }
-        button {
-            background-color: #9bb4ff;
-            color: white;
-            border: none;
-            border-radius: 999px;
-            padding: 12px 20px;
+        
+        .step-indicator {
+            text-align: center;
+            color: #fff;
             font-family: arial black;
-            font-size: 16px;
-            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 20px;
         }
-        #btn-voltar {
+        
+        .step-indicator .step {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #6c757d;
+            color: white;
+            line-height: 30px;
+            margin: 0 10px;
+        }
+        
+        .step-indicator .step.active {
             background-color: #9bb4ff;
-            margin-top: 10px;
+        }
+        
+        .step-indicator .step.completed {
+            background-color: #28a745;
         }
     `;
     document.head.appendChild(style);
@@ -169,14 +189,19 @@ export function renderUserRegistration(container) {
             <p class='cadastro'>Cadastro</p>
         </div>
 
-        <form id="registration-step1" novalidate>
+        <div class="step-indicator">
+            <span class="step active">1</span>
+            <span class="step">2</span>
+        </div>
+
+        <form class="registration-form" id="registration-step1" novalidate>
             <input id="nome" type="text" name="nome" placeholder="Nome Completo" required />
             <div id="error-nome" class="error-message"></div>
 
             <input id="cpf" type="text" name="cpf" placeholder="CPF" required />
             <div id="error-cpf" class="error-message"></div>
 
-            <input id="senha" type="password" name="senha" placeholder="Crie uma senha" required />
+            <input id="senha" type="password" name="senha" placeholder="Crie uma senha (min. 8 caracteres)" required />
             <div id="error-senha" class="error-message"></div>
 
             <input id="data_nascimento" type="date" name="data_nascimento" required />
@@ -185,8 +210,8 @@ export function renderUserRegistration(container) {
             <button type="submit">Continuar</button>
         </form>
 
-        <div class='contaclasse'>
-            <p class='conta'>Já possui uma conta?<a href="#" id="go-login" style='margin-left: 5px; color: #9bb4ff;'>Entre</a></p>
+        <div class='conta'>
+            <p>Já possui uma conta?<a href="#" id="go-login" style='margin-left: 5px; color: #9bb4ff;'>Entre</a></p>
         </div>
     `;
 
@@ -241,9 +266,11 @@ export function renderUserRegistration(container) {
 
         if (hasError) return;
         
-        // Chamada de API para verificar se o CPF já existe
+        // Verificar se CPF já existe
         try {
-            const checkCpfResponse = await fetch(`http://localhost:3000/api/check-cpf/${cpf}`);
+            const checkCpfResponse = await fetch(`http://localhost:3000/api/check-cpf/${cpf}`, {
+                credentials: 'include'
+            });
             const checkCpfResult = await checkCpfResponse.json();
 
             if (checkCpfResult.exists) {
@@ -262,61 +289,41 @@ export function renderUserRegistration(container) {
 
 function renderUserRegistrationStep2(container, step1Data) {
     container.innerHTML = `
-        <h1>Cadastro - Etapa 2</h1>
-        <form id="registration-step2" novalidate>
-            <label for="email">Email</label>
-            <input id="email" type="email" name="email" placeholder="exemplo@dominio.com" required />
+        <div class='containerCadastro centro' style="background-image: url('${folhaLogin}');">
+            <img src="${logo_librain_T}" alt="Logo" height='200px' width='200px'>
+        </div>
+
+        <div class='centro'>
+            <p class='cadastro'>Cadastro</p>
+        </div>
+
+        <div class="step-indicator">
+            <span class="step completed">1</span>
+            <span class="step active">2</span>
+        </div>
+
+        <form class="registration-form" id="registration-step2" novalidate>
+            <input id="email" type="email" name="email" placeholder="E-mail" required />
             <div id="error-email" class="error-message"></div>
 
-            <label for="genero">Gênero</label>
             <select id="genero" name="genero" required>
-                <option value="">Selecione</option>
+                <option value="">Selecione seu gênero</option>
                 <option value="feminino">Feminino</option>
                 <option value="masculino">Masculino</option>
                 <option value="nao_informar">Prefiro não informar</option>
             </select>
             <div id="error-genero" class="error-message"></div>
 
-            <label for="tel_residencial">Telefone Residencial</label>
-            <input id="tel_residencial" type="tel" name="tel_residencial" placeholder="(00) 00000-0000" required />
-            <div id="error-tel_residencial" class="error-message"></div>
-
-            <label for="tel_comercial">Telefone Comercial</label>
-            <input id="tel_comercial" type="tel" name="tel_comercial" placeholder="(00) 00000-0000" required />
-            <div id="error-tel_comercial" class="error-message"></div>
-
-            <label for="identidade">Identidade</label>
-            <input id="identidade" type="text" name="identidade" placeholder="Identidade" required />
-            <div id="error-identidade" class="error-message"></div>
-
-            <label for="endereco">Endereço</label>
-            <input id="endereco" type="text" name="endereco" placeholder="Endereço" required />
-            <div id="error-endereco" class="error-message"></div>
-
-            <label for="numero">Número</label>
-            <input id="numero" type="text" name="numero" placeholder="Número" required />
-            <div id="error-numero" class="error-message"></div>
-
-            <label for="cep">CEP</label>
-            <input id="cep" type="text" name="cep" placeholder="00000-000" required />
-            <div id="error-cep" class="error-message"></div>
-
-            <label for="cidade">Cidade</label>
             <input id="cidade" type="text" name="cidade" placeholder="Cidade" required />
             <div id="error-cidade" class="error-message"></div>
 
-            <label for="estado">Estado</label>
-            <input id="estado" type="text" name="estado" placeholder="Estado" required />
+            <input id="estado" type="text" name="estado" placeholder="Estado (ex: SP)" maxlength="2" required />
             <div id="error-estado" class="error-message"></div>
 
             <button type="submit">Finalizar Cadastro</button>
-            <button type="button" id="btn-voltar">Voltar</button>
+            <button type="button" class="btn-voltar" id="btn-voltar">Voltar</button>
         </form>
     `;
-
-    IMask(document.getElementById('tel_residencial'), { mask: '(00) 00000-0000' });
-    IMask(document.getElementById('tel_comercial'), { mask: '(00) 00000-0000' });
-    IMask(document.getElementById('cep'), { mask: '00000-000' });
 
     const formStep2 = document.getElementById('registration-step2');
     const btnVoltar = document.getElementById('btn-voltar');
@@ -325,27 +332,30 @@ function renderUserRegistrationStep2(container, step1Data) {
         renderUserRegistration(container);
     };
 
+    // Converter estado para maiúsculas
+    const estadoInput = document.getElementById('estado');
+    estadoInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.toUpperCase();
+    });
+
     formStep2.onsubmit = async (e) => {
         e.preventDefault();
 
-        ['email', 'genero', 'tel_residencial', 'tel_comercial', 'identidade', 'endereco', 'numero', 'cep', 'cidade', 'estado']
-            .forEach(field => document.getElementById('error-' + field).textContent = '');
+        // Limpar erros anteriores
+        ['email', 'genero', 'cidade', 'estado'].forEach(field => {
+            document.getElementById('error-' + field).textContent = '';
+        });
 
         const email = document.getElementById('email').value.trim();
         const genero = document.getElementById('genero').value;
-        const tel_residencial = document.getElementById('tel_residencial').value.trim();
-        const tel_comercial = document.getElementById('tel_comercial').value.trim();
-        const identidade = document.getElementById('identidade').value.trim();
-        const endereco = document.getElementById('endereco').value.trim();
-        const numero = document.getElementById('numero').value.trim();
-        const cep = document.getElementById('cep').value.trim();
         const cidade = document.getElementById('cidade').value.trim();
         const estado = document.getElementById('estado').value.trim();
 
         let hasError = false;
 
+        // Validações
         if (!email.match(/^\S+@\S+\.\S+$/)) {
-            document.getElementById('error-email').textContent = 'Email inválido.';
+            document.getElementById('error-email').textContent = 'E-mail inválido.';
             hasError = true;
         }
 
@@ -354,100 +364,67 @@ function renderUserRegistrationStep2(container, step1Data) {
             hasError = true;
         }
 
-        if (!validarTelefone(tel_residencial)) {
-            document.getElementById('error-tel_residencial').textContent = 'Telefone inválido.';
+        if (cidade.length < 2) {
+            document.getElementById('error-cidade').textContent = 'Cidade deve ter pelo menos 2 caracteres.';
             hasError = true;
         }
 
-        if (!validarTelefone(tel_comercial)) {
-            document.getElementById('error-tel_comercial').textContent = 'Telefone inválido.';
-            hasError = true;
-        }
-
-        if (identidade.length < 3) {
-            document.getElementById('error-identidade').textContent = 'Identidade inválida.';
-            hasError = true;
-        }
-
-        if (endereco.length < 3) {
-            document.getElementById('error-endereco').textContent = 'Endereço inválido.';
-            hasError = true;
-        }
-
-        if (!numero) {
-            document.getElementById('error-numero').textContent = 'Número inválido.';
-            hasError = true;
-        }
-
-        if (cep.replace(/[^\d]/g, '').length !== 8) {
-            document.getElementById('error-cep').textContent = 'CEP inválido.';
-            hasError = true;
-        }
-
-        if (cidade.length < 3) {
-            document.getElementById('error-cidade').textContent = 'Cidade inválida.';
-            hasError = true;
-        }
-
-        if (estado.length < 2) {
-            document.getElementById('error-estado').textContent = 'Estado inválido.';
+        if (estado.length !== 2) {
+            document.getElementById('error-estado').textContent = 'Estado deve ter 2 caracteres (ex: SP).';
             hasError = true;
         }
 
         if (hasError) return;
 
+        // Dados finais para envio
         const finalData = {
             ...step1Data,
             tipo: 'leitor',
             email,
             genero,
-            tel_residencial,
-            tel_comercial,
-            identidade,
-            endereco,
-            numero,
-            cep: cep.replace('-', ''),
             cidade,
-            estado
+            estado,
+            // Campos opcionais com valores padrão
+            tel_residencial: null,
+            tel_comercial: null,
+            identidade: null,
+            endereco: null,
+            numero: null,
+            complemento: null,
+            cep: null
         };
 
+        console.log('Dados do cadastro:', finalData);
+
         try {
-            const apiUrl = 'http://localhost:3000/api/register';
-            const response = await fetch(apiUrl, {
+            const response = await fetch('http://localhost:3000/api/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify(finalData)
             });
         
-            // Lida com respostas que não foram bem-sucedidas (por exemplo, status 400 ou 500)
             if (!response.ok) {
                 let errorMessage = 'Erro desconhecido no cadastro.';
                 try {
-                    // Tenta analisar a mensagem de erro como JSON
                     const errorData = await response.json();
-                    if (errorData.message) {
-                        errorMessage = errorData.message;
-                    } else if (errorData.error) {
-                        errorMessage = errorData.error;
-                    }
+                    errorMessage = errorData.error || errorData.message || errorMessage;
                 } catch (jsonError) {
-                    // Se a análise JSON falhar, obtém o erro como texto simples
                     errorMessage = await response.text();
                 }
                 alert(errorMessage);
-                return; // Interrompe a execução para evitar que as próximas linhas sejam executadas
+                return;
             }
         
-            // Lida com a resposta bem-sucedida
             const result = await response.json();
-            alert(result.message);
+            alert(result.message || 'Cadastro realizado com sucesso!');
             navigateTo('login');
         
         } catch (networkError) {
             console.error('Erro de rede ou de conexão:', networkError);
             alert('Erro de rede ou de conexão. Por favor, tente novamente.');
         }
-    }
+    };
 }

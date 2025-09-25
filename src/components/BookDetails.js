@@ -27,6 +27,9 @@ export async function renderBookDetails(container, bookId) {
             });
             if (currentUserResponse.ok) {
                 currentUser = await currentUserResponse.json();
+                console.log('Usuário logado:', currentUser.nome);
+            } else {
+                console.log('Usuário não logado');
             }
         } catch (error) {
             console.log('Usuário não logado ou erro na API de perfil');
@@ -53,6 +56,7 @@ export async function renderBookDetails(container, bookId) {
             });
             if (reviewsResponse.ok) {
                 allReviews = await reviewsResponse.json();
+                console.log('Resenhas carregadas:', allReviews.length);
             }
         } catch (error) {
             console.log('Erro ao carregar resenhas:', error);
@@ -67,6 +71,7 @@ export async function renderBookDetails(container, bookId) {
                 });
                 if (shelvesResponse.ok) {
                     userShelves = await shelvesResponse.json();
+                    console.log('Prateleiras carregadas:', userShelves.length);
                 }
             } catch (error) {
                 console.log('Erro ao carregar prateleiras:', error);
@@ -78,22 +83,31 @@ export async function renderBookDetails(container, bookId) {
         const avgRating = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null;
         
         // Verificar se está favoritado (se usuário logado)
-        const isFavorited = currentUser && currentUser.favorites && currentUser.favorites.includes(book.id);
+        const isFavorited = currentUser && currentUser.favorites && currentUser.favorites.includes(parseInt(bookId));
 
         // Lógica para botões de ação (apenas se usuário logado)
         let actionButtonHtml = '';
         if (currentUser) {
-            const isAvailable = book.available !== false; // assumir disponível por padrão
+            const isAvailable = book.available !== false;
             const isUserInQueue = book.queue && book.queue.includes(currentUser.cpf);
             const isLoanedToUser = book.emprestadoPara === currentUser.cpf;
-            const isDevolucaoPendente = book.devolucoesPendentes && book.devolucoesPendentes.includes(currentUser.cpf);
             
-            if (isLoanedToUser && !isDevolucaoPendente) {
+            console.log('Status do livro:', {
+                isAvailable,
+                isUserInQueue,
+                isLoanedToUser,
+                emprestadoPara: book.emprestadoPara,
+                userCpf: currentUser.cpf
+            });
+            
+            if (isLoanedToUser) {
                 actionButtonHtml = `<button id="devolverBtn" class="btn">Solicitar Devolução</button>`;
-            } else if (isDevolucaoPendente) {
-                actionButtonHtml = `<button class="btn" disabled>Devolução Solicitada</button>`;
             } else if (isUserInQueue) {
-                actionButtonHtml = `<button id="cancelarSolicitacaoBtn" class="btn">Cancelar Solicitação</button>`;
+                const position = book.queue.indexOf(currentUser.cpf) + 1;
+                actionButtonHtml = `
+                    <p>Você está na posição ${position} da fila</p>
+                    <button id="cancelarReservaBtn" class="btn btn-secondary">Cancelar Reserva</button>
+                `;
             } else if (!isAvailable) {
                 actionButtonHtml = `<button id="reservarBtn" class="btn">Entrar na Fila de Espera</button>`;
             } else {
@@ -103,7 +117,7 @@ export async function renderBookDetails(container, bookId) {
             actionButtonHtml = '<p style="color: var(--azul-claro);">Faça login para solicitar empréstimos</p>';
         }
 
-        // Usar placeholder offline em vez do via.placeholder.com
+        // Usar placeholder offline
         const imageUrl = book.cover || createPlaceholderImage(book.title);
 
         container.innerHTML = `
@@ -163,7 +177,7 @@ export async function renderBookDetails(container, bookId) {
                 <div id="reviewsList">
                     <h3>Resenhas dos usuários:</h3>
                     ${allReviews.length ? allReviews.map(r => `
-                        <div class="review-card" data-cpf="${r.cpf || ''}" data-reviewid="${r.reviewId || r.id || ''}">
+                        <div class="review-card" data-cpf="${r.cpf || ''}" data-reviewid="${r.id || ''}">
                             <strong>${currentUser && r.cpf === currentUser.cpf ? "Você" : (r.user || 'Usuário')}</strong> 
                             <em>(${r.date || 'Data não disponível'})</em>
                             <div class="stars-display">
@@ -246,91 +260,84 @@ export async function renderBookDetails(container, bookId) {
             });
         });
 
-// Salvar resenha - VERSÃO CORRIGIDA
-const saveBtn = document.getElementById('saveReviewBtn');
-if (saveBtn) {
-    saveBtn.onclick = async () => {
-        console.log('=== DEBUG SALVAR RESENHA ===');
-        
-        const text = document.getElementById('reviewText').value.trim();
-        console.log('Texto da resenha:', text);
-        console.log('Rating selecionado:', selectedRating);
-        console.log('Editando review ID:', editingReviewId);
-        
-        if (selectedRating === 0 && !editingReviewId) {
-            alert('Por favor, selecione uma classificação em estrelas.');
-            return;
-        }
-        
-        // NÃO ENVIAR DATE - deixar o servidor criar a data
-        let url = 'http://localhost:3000/api/reviews';
-        let method = 'POST';
-        let body = { 
-            bookId: parseInt(bookId), 
-            text: text, 
-            rating: selectedRating
-            // Removido: date - o servidor vai criar automaticamente
-        };
+        // Salvar resenha
+        const saveBtn = document.getElementById('saveReviewBtn');
+        if (saveBtn) {
+            saveBtn.onclick = async () => {
+                console.log('=== DEBUG SALVAR RESENHA ===');
+                
+                const text = document.getElementById('reviewText').value.trim();
+                console.log('Texto da resenha:', text);
+                console.log('Rating selecionado:', selectedRating);
+                
+                if (selectedRating === 0 && !editingReviewId) {
+                    alert('Por favor, selecione uma classificação em estrelas.');
+                    return;
+                }
+                
+                let url = 'http://localhost:3000/api/reviews';
+                let method = 'POST';
+                let body = { 
+                    bookId: parseInt(bookId), 
+                    text: text, 
+                    rating: selectedRating
+                };
 
-        if (editingReviewId) {
-            url = `${url}/${editingReviewId}`;
-            method = 'PUT';
-            body = { 
-                text: text, 
-                rating: selectedRating
-                // Removido: date - o servidor vai atualizar automaticamente
+                if (editingReviewId) {
+                    url = `${url}/${editingReviewId}`;
+                    method = 'PUT';
+                }
+
+                console.log('URL:', url);
+                console.log('Method:', method);
+                console.log('Body:', body);
+
+                try {
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify(body)
+                    });
+
+                    console.log('Status da resposta:', response.status);
+
+                    if (response.ok) {
+                        const responseData = await response.json();
+                        console.log('Resposta do servidor:', responseData);
+                        
+                        alert(responseData.message || 'Resenha salva com sucesso!');
+                        
+                        // Recarregar a página de detalhes
+                        renderBookDetails(container, bookId);
+                    } else {
+                        const errorData = await response.json();
+                        console.error('Erro HTTP:', response.status, errorData);
+                        
+                        let userMessage = errorData.error || errorData.message || 'Erro desconhecido';
+                        if (response.status === 401) {
+                            userMessage = 'Você precisa estar logado para salvar resenhas';
+                        } else if (response.status === 400 && errorData.error?.includes('já avaliou')) {
+                            userMessage = 'Você já avaliou este livro';
+                        } else if (response.status === 500) {
+                            userMessage = 'Erro interno do servidor. Tente novamente.';
+                        }
+                        
+                        alert(`Erro ao salvar resenha: ${userMessage}`);
+                    }
+                } catch (error) {
+                    console.error('Erro de conexão:', error);
+                    alert('Erro de conexão ao salvar resenha. Verifique se o servidor está rodando.');
+                }
+                
+                console.log('=== FIM DEBUG SALVAR RESENHA ===');
             };
         }
 
-        console.log('URL:', url);
-        console.log('Method:', method);
-        console.log('Body:', body);
-
-        try {
-            const response = await fetch(url, {
-                method: method,
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                credentials: 'include',
-                body: JSON.stringify(body)
-            });
-
-            console.log('Status da resposta:', response.status);
-            console.log('Headers da resposta:', [...response.headers.entries()]);
-
-            if (response.ok) {
-                const responseData = await response.text();
-                console.log('Resposta do servidor:', responseData);
-                
-                alert(responseData || 'Resenha salva com sucesso!');
-                
-                // Recarregar a página de detalhes
-                renderBookDetails(container, bookId);
-            } else {
-                const errorText = await response.text();
-                console.error('Erro HTTP:', response.status, errorText);
-                
-                let userMessage = errorText;
-                if (response.status === 401) {
-                    userMessage = 'Você precisa estar logado para salvar resenhas';
-                } else if (response.status === 500) {
-                    userMessage = 'Erro interno do servidor. Tente novamente.';
-                }
-                
-                alert(`Erro ao salvar resenha: ${userMessage}`);
-            }
-        } catch (error) {
-            console.error('Erro de conexão:', error);
-            alert('Erro de conexão ao salvar resenha. Verifique se o servidor está rodando.');
-        }
-        
-        console.log('=== FIM DEBUG SALVAR RESENHA ===');
-    };
-}
-
-        // Botões de ação de empréstimo - VERSÃO COM DEBUG
+        // Botão de solicitar empréstimo
         const solicitarBtn = document.getElementById('solicitarBtn');
         if (solicitarBtn) {
             solicitarBtn.onclick = async () => {
@@ -339,18 +346,6 @@ if (saveBtn) {
                 console.log('Usuário:', currentUser?.nome);
                 
                 try {
-                    // Primeiro verificar se ainda está autenticado
-                    const authCheck = await fetch('http://localhost:3000/api/profile', {
-                        credentials: 'include'
-                    });
-                    
-                    if (!authCheck.ok) {
-                        alert('Sessão expirada. Faça login novamente.');
-                        return;
-                    }
-                    
-                    console.log('Enviando solicitação de empréstimo...');
-                    
                     const response = await fetch('http://localhost:3000/api/loan/request', {
                         method: 'POST',
                         headers: { 
@@ -363,24 +358,85 @@ if (saveBtn) {
                     
                     console.log('Status da resposta:', response.status);
                     
-                    const responseText = await response.text();
-                    console.log('Resposta do servidor:', responseText);
-                    
                     if (response.ok) {
-                        alert(responseText || 'Solicitação enviada com sucesso!');
+                        const responseData = await response.json();
+                        alert(responseData.message || 'Empréstimo solicitado com sucesso!');
                         renderBookDetails(container, bookId);
                     } else {
-                        let errorMsg = responseText;
+                        const errorData = await response.json();
+                        console.error('Erro HTTP:', response.status, errorData);
+                        
+                        let errorMsg = errorData.error || errorData.message || 'Erro desconhecido';
                         if (response.status === 401) errorMsg = 'Você precisa estar logado';
-                        if (response.status === 400) errorMsg = 'Livro já está emprestado ou dados inválidos';
+                        if (response.status === 400) errorMsg = errorData.error || 'Livro já está emprestado ou dados inválidos';
                         if (response.status === 404) errorMsg = 'Livro não encontrado';
                         if (response.status === 500) errorMsg = 'Erro interno do servidor';
                         
-                        alert(`Erro (${response.status}): ${errorMsg}`);
+                        alert(`Erro: ${errorMsg}`);
                     }
                 } catch (error) {
                     console.error('Erro na requisição:', error);
                     alert('Erro de conexão. Verifique se o servidor está rodando.');
+                }
+            };
+        }
+
+        // Botão de reservar (entrar na fila)
+        const reservarBtn = document.getElementById('reservarBtn');
+        if (reservarBtn) {
+            reservarBtn.onclick = async () => {
+                try {
+                    const response = await fetch('http://localhost:3000/api/loan/reserve', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ bookId: parseInt(bookId) })
+                    });
+                    
+                    if (response.ok) {
+                        const responseData = await response.json();
+                        alert(responseData.message || 'Você entrou na fila de espera!');
+                        renderBookDetails(container, bookId);
+                    } else {
+                        const errorData = await response.json();
+                        alert(`Erro: ${errorData.error || 'Erro desconhecido'}`);
+                    }
+                } catch (error) {
+                    console.error('Erro na requisição:', error);
+                    alert('Erro de conexão.');
+                }
+            };
+        }
+
+        // Botão de devolver
+        const devolverBtn = document.getElementById('devolverBtn');
+        if (devolverBtn) {
+            devolverBtn.onclick = async () => {
+                if (!confirm('Deseja realmente solicitar a devolução deste livro?')) return;
+                
+                try {
+                    const response = await fetch('http://localhost:3000/api/loan/request-return', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ bookId: parseInt(bookId) })
+                    });
+                    
+                    if (response.ok) {
+                        const responseData = await response.json();
+                        alert(responseData.message || 'Solicitação de devolução enviada!');
+                        renderBookDetails(container, bookId);
+                    } else {
+                        const errorData = await response.json();
+                        alert(`Erro: ${errorData.error || 'Erro desconhecido'}`);
+                    }
+                } catch (error) {
+                    console.error('Erro na requisição:', error);
+                    alert('Erro de conexão.');
                 }
             };
         }
@@ -402,10 +458,14 @@ if (saveBtn) {
                         credentials: 'include',
                         body: method === 'POST' ? JSON.stringify({ bookId: parseInt(bookId) }) : null
                     });
-                    const message = await response.text();
-                    alert(message || (isFavorited ? 'Removido dos favoritos' : 'Adicionado aos favoritos'));
+                    
                     if (response.ok) {
+                        const responseData = await response.json();
+                        alert(responseData.message || (isFavorited ? 'Removido dos favoritos' : 'Adicionado aos favoritos'));
                         renderBookDetails(container, bookId);
+                    } else {
+                        const errorData = await response.json();
+                        alert(`Erro: ${errorData.error || 'Erro desconhecido'}`);
                     }
                 } catch (error) {
                     alert('Erro ao favoritar/desfavoritar o livro.');
@@ -438,6 +498,36 @@ if (saveBtn) {
                     if (userShelves.length === 0) {
                         shelfList.innerHTML = '<p>Você não tem prateleiras personalizadas. Crie uma!</p>';
                     }
+                    
+                    // Event listeners para os botões de adicionar à prateleira
+                    shelfList.querySelectorAll('.add-to-shelf-btn').forEach(btn => {
+                        btn.onclick = async () => {
+                            const shelfId = btn.dataset.shelfId;
+                            try {
+                                const response = await fetch('http://localhost:3000/api/user/shelves/add-book', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'include',
+                                    body: JSON.stringify({ 
+                                        shelfId: parseInt(shelfId), 
+                                        bookId: parseInt(bookId) 
+                                    })
+                                });
+                                
+                                if (response.ok) {
+                                    const responseData = await response.json();
+                                    alert(responseData.message || 'Livro adicionado à prateleira!');
+                                    modal.style.display = 'none';
+                                } else {
+                                    const errorData = await response.json();
+                                    alert(`Erro: ${errorData.error || 'Erro desconhecido'}`);
+                                }
+                            } catch (error) {
+                                alert('Erro ao adicionar livro à prateleira.');
+                                console.error(error);
+                            }
+                        };
+                    });
                 }
                 modal.style.display = 'block';
             };
@@ -462,7 +552,7 @@ if (saveBtn) {
                 btn.onclick = (e) => {
                     const card = e.target.closest('.review-card');
                     const reviewId = card.dataset.reviewid;
-                    const review = allReviews.find(r => (r.reviewId || r.id) == reviewId);
+                    const review = allReviews.find(r => r.id == reviewId);
                     if (review) {
                         document.getElementById('reviewText').value = review.text || '';
                         selectedRating = review.rating || 0;
@@ -490,12 +580,12 @@ if (saveBtn) {
                         });
 
                         if (response.ok) {
-                            const message = await response.text();
-                            alert(message || 'Resenha excluída com sucesso!');
+                            const responseData = await response.json();
+                            alert(responseData.message || 'Resenha excluída com sucesso!');
                             renderBookDetails(container, bookId);
                         } else {
-                            const errorText = await response.text();
-                            alert(`Erro ao excluir resenha: ${errorText}`);
+                            const errorData = await response.json();
+                            alert(`Erro ao excluir resenha: ${errorData.error || 'Erro desconhecido'}`);
                         }
                     } catch (error) {
                         alert('Erro de conexão ao excluir resenha.');

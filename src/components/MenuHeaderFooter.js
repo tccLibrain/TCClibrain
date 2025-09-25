@@ -1,4 +1,4 @@
-import { navigateTo } from '../main.js';
+import { navigateTo, performLogout } from '../main.js';
 import texto_e_livro from '../images/texto_e_livro.png';
 
 export async function createShell(appContainer) {
@@ -7,17 +7,28 @@ export async function createShell(appContainer) {
         return;
     }
 
+    console.log('Criando shell da aplicação...');
+    
     let user = null;
     try {
-        const response = await fetch('http://localhost:3000/api/profile');
+        const response = await fetch('http://localhost:3000/api/profile', {
+            credentials: 'include'
+        });
         if (response.ok) {
             user = await response.json();
+            console.log('Usuário carregado no shell:', user.nome);
+        } else {
+            console.log('Usuário não logado no shell');
         }
     } catch (error) {
-        console.error('Erro ao carregar perfil do usuário:', error);
+        console.error('Erro ao carregar perfil do usuário no shell:', error);
     }
 
     const isAdmin = user && user.tipo === 'admin';
+    console.log('É admin?', isAdmin);
+
+    // Avatar padrão se não houver avatar_url
+    const avatarUrl = user?.avatar_url || 'https://i.pravatar.cc/150?img=' + (user?.id || 12);
 
     let navLinksHtml = '';
     let footerHtml = '';
@@ -25,6 +36,9 @@ export async function createShell(appContainer) {
     if (isAdmin) {
         // Menu para o Administrador
         navLinksHtml = `
+            <a href="#" data-target="books">📚 Catálogo de Livros</a>
+            <a href="#" data-target="admin">⚙️ Painel Admin</a>
+            <a href="#" data-target="profile">👤 Meu Perfil</a>
             <a href="#" id="logout">🚪 Sair</a>
         `;
         // Admins não precisam do footer de navegação
@@ -32,18 +46,27 @@ export async function createShell(appContainer) {
     } else {
         // Menu para o Usuário Comum
         navLinksHtml = `
-            <a href="#" data-target="profile">👤 Perfil</a>
-            <a href="#" data-target="dashboard">📊 Empréstimos & Reservas</a>
-            <a href="#" data-target="shelves">📚 Prateleiras</a>
-            <a href="#" data-target="books">📚 Livros</a>
+            <a href="#" data-target="books">📚 Explorar Livros</a>
+            <a href="#" data-target="dashboard">📊 Meus Empréstimos</a>
+            <a href="#" data-target="shelves">📚 Minhas Prateleiras</a>
+            <a href="#" data-target="profile">👤 Meu Perfil</a>
             <a href="#" id="logout">🚪 Sair</a>
         `;
         // Footer de navegação para usuários comuns
         footerHtml = `
             <footer class="footer-nav">
-                <button class="footer-btn active" data-target="books">🏠<span>Início</span></button>
-                <button class="footer-btn" data-target="profile">👤<span>Perfil</span></button>
-                <button class="footer-btn" data-target="shelves">📚<span>Prateleiras</span></button>
+                <button class="footer-btn active" data-target="books" title="Explorar Livros">
+                    🏠<span>Início</span>
+                </button>
+                <button class="footer-btn" data-target="dashboard" title="Meus Empréstimos">
+                    📊<span>Empréstimos</span>
+                </button>
+                <button class="footer-btn" data-target="shelves" title="Minhas Prateleiras">
+                    📚<span>Prateleiras</span>
+                </button>
+                <button class="footer-btn" data-target="profile" title="Meu Perfil">
+                    👤<span>Perfil</span>
+                </button>
             </footer>
         `;
     }
@@ -51,19 +74,25 @@ export async function createShell(appContainer) {
     appContainer.innerHTML = `
         <header class="shell-header">
             <div class="header-left">
-                <img src="${user?.avatarUrl || 'https://i.pravatar.cc/150?img=12'}" alt="avatar" class="avatar" id="avatar-img"/>
+                <img src="${avatarUrl}" alt="Avatar de ${user?.nome || 'Usuário'}" class="avatar" id="avatar-img" title="${user?.nome || 'Usuário'}"/>
             </div>
 
             <div class="header-center">
-                <img src="${texto_e_livro}" alt="Logo" class="logo"/>
+                <img src="${texto_e_livro}" alt="Logo Librain" class="logo" title="Sistema Librain"/>
             </div>
 
             <div class="header-right">
-                <button class="menu-btn" id="hamburger">☰</button>
+                <button class="menu-btn" id="hamburger" title="Menu">☰</button>
             </div>
         </header>
 
         <div id="menu-wrapper">
+            <div class="menu-header">
+                <img src="${avatarUrl}" alt="Avatar" style="width: 60px; height: 60px; border-radius: 50%; margin-bottom: 10px;"/>
+                <h3 style="color: white; margin: 0 0 5px 0; font-size: 16px;">${user?.nome || 'Usuário'}</h3>
+                <p style="color: #ccc; margin: 0; font-size: 12px;">${isAdmin ? 'Administrador' : 'Leitor'}</p>
+                <hr style="border: 1px solid #444; margin: 15px 0;"/>
+            </div>
             <nav>${navLinksHtml}</nav>
         </div>
 
@@ -72,52 +101,204 @@ export async function createShell(appContainer) {
         <div class="content"></div>
 
         ${footerHtml}
+        
+        <style>
+            .menu-header {
+                text-align: center;
+                padding: 20px 0;
+                border-bottom: 1px solid #444;
+                margin-bottom: 10px;
+            }
+            
+            #menu-wrapper nav a {
+                display: block;
+                padding: 15px 20px;
+                color: #fff;
+                font-size: 16px;
+                text-decoration: none;
+                border-left: 3px solid transparent;
+                transition: all 0.3s ease;
+            }
+            
+            #menu-wrapper nav a:hover {
+                background-color: #333;
+                border-left-color: #9bb4ff;
+                padding-left: 25px;
+            }
+            
+            .footer-btn {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 8px 4px;
+                min-height: 50px;
+                justify-content: center;
+            }
+            
+            .footer-btn span {
+                font-size: 10px;
+                margin-top: 2px;
+                line-height: 1;
+            }
+            
+            .avatar {
+                cursor: pointer;
+                transition: transform 0.2s ease;
+            }
+            
+            .avatar:hover {
+                transform: scale(1.1);
+            }
+            
+            .menu-btn {
+                transition: all 0.3s ease;
+            }
+            
+            .menu-btn:hover {
+                transform: scale(1.1);
+                background-color: var(--azul-original);
+            }
+            
+            @media (max-width: 768px) {
+                .header-left, .header-right {
+                    margin: 0 8px;
+                }
+                
+                .shell-header .avatar {
+                    width: 45px;
+                    height: 45px;
+                }
+                
+                .footer-btn span {
+                    font-size: 9px;
+                }
+            }
+        </style>
     `;
 
+    console.log('Shell HTML criado');
+
+    // Configurar event listeners
+    setupShellEventListeners(user, isAdmin);
+}
+
+function setupShellEventListeners(user, isAdmin) {
     const menuWrapper = document.getElementById('menu-wrapper');
     const overlay = document.getElementById('overlay-menu');
     const hamburger = document.getElementById('hamburger');
+    const avatarImg = document.getElementById('avatar-img');
 
+    if (!menuWrapper || !overlay || !hamburger) {
+        console.error('Elementos do menu não encontrados');
+        return;
+    }
+
+    // Toggle do menu hamburger
     hamburger.addEventListener('click', () => {
+        const isOpen = menuWrapper.classList.contains('show');
+        console.log('Toggle menu:', !isOpen);
+        
         menuWrapper.classList.toggle('show');
         overlay.classList.toggle('show');
+        
+        // Animação do botão hamburger
+        hamburger.textContent = isOpen ? '☰' : '✕';
     });
 
+    // Fechar menu ao clicar no overlay
     overlay.addEventListener('click', () => {
+        console.log('Fechando menu pelo overlay');
         menuWrapper.classList.remove('show');
         overlay.classList.remove('show');
+        hamburger.textContent = '☰';
     });
 
-    menuWrapper.addEventListener('click', async e => {
+    // Navegação pelo menu lateral
+    menuWrapper.addEventListener('click', async (e) => {
         const a = e.target.closest('a');
         if (!a) return;
-        e.preventDefault();
         
-        if (a.dataset.target) {
-            navigateTo(a.dataset.target);
-        } else if (a.id === 'logout') {
-            try {
-                // Fazer uma requisição para o backend para fazer o logout
-                await fetch('http://localhost:3000/api/logout', { method: 'POST' });
-            } catch (error) {
-                console.error('Erro ao fazer logout:', error);
-            }
-            localStorage.removeItem('user');
-            navigateTo('login');
-        }
+        e.preventDefault();
+        console.log('Clique no menu:', a.dataset.target || a.id);
+        
+        // Fechar menu
         menuWrapper.classList.remove('show');
         overlay.classList.remove('show');
+        hamburger.textContent = '☰';
+        
+        if (a.dataset.target) {
+            console.log('Navegando para:', a.dataset.target);
+            navigateTo(a.dataset.target, { user });
+        } else if (a.id === 'logout') {
+            console.log('Fazendo logout...');
+            if (confirm('Deseja realmente sair do sistema?')) {
+                await performLogout();
+            }
+        }
     });
 
-    // Eventos do footer só são adicionados se o footer existir
+    // Click no avatar para ir ao perfil
+    if (avatarImg) {
+        avatarImg.addEventListener('click', () => {
+            console.log('Clique no avatar, indo para perfil');
+            navigateTo('profile', { user });
+        });
+    }
+
+    // Navegação pelo footer (apenas para usuários não-admin)
     if (!isAdmin) {
         const footerBtns = document.querySelectorAll('.footer-btn');
         footerBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                footerBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                navigateTo(btn.dataset.target);
+            btn.addEventListener('click', (e) => {
+                const target = btn.dataset.target;
+                console.log('Footer navegação:', target);
+                
+                if (target) {
+                    // Atualizar botão ativo
+                    footerBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    // Navegar
+                    navigateTo(target, { user });
+                }
             });
         });
     }
+
+    // Fechar menu com ESC
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && menuWrapper.classList.contains('show')) {
+            menuWrapper.classList.remove('show');
+            overlay.classList.remove('show');
+            hamburger.textContent = '☰';
+        }
+    });
+
+    console.log('Event listeners do shell configurados');
+}
+
+// Função utilitária para atualizar avatar no shell
+export function updateShellAvatar(newAvatarUrl) {
+    const avatarElements = document.querySelectorAll('.avatar, .menu-header img');
+    avatarElements.forEach(img => {
+        if (img) {
+            img.src = newAvatarUrl;
+        }
+    });
+}
+
+// Função utilitária para atualizar nome do usuário no shell
+export function updateShellUserName(newName) {
+    const nameElement = document.querySelector('.menu-header h3');
+    if (nameElement) {
+        nameElement.textContent = newName;
+    }
+    
+    const avatarElements = document.querySelectorAll('.avatar');
+    avatarElements.forEach(img => {
+        if (img) {
+            img.alt = `Avatar de ${newName}`;
+            img.title = newName;
+        }
+    });
 }

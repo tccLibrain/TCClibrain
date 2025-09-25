@@ -10,95 +10,261 @@ import { renderShelves } from './components/Shelves.js';
 
 const app = document.getElementById('app');
 
-export async function initApp() {
+// Verificar se o usuário está logado
+async function checkAuthStatus() {
     try {
         const response = await fetch('http://localhost:3000/api/profile', {
             credentials: 'include'
         });
         
-        // CORREÇÃO: Verifica se a resposta foi 'ok' (status 200-299) antes de processá-la.
         if (response.ok) {
-            const user = await response.json();
-            // Navega para o painel de admin ou para a lista de livros, passando o usuário.
-            navigateTo(user.tipo === 'admin' ? 'admin' : 'books', { user });
-        } else {
-            // Se a resposta não for 'ok', significa que não há sessão.
-            // A navegação vai direto para a tela de login.
-            navigateTo('login');
+            return await response.json();
         }
+        return null;
     } catch (error) {
-        console.error('Erro na inicialização da aplicação:', error);
-        // Em caso de qualquer erro, como falha de conexão, navega para o login.
+        console.error('Erro ao verificar status de autenticação:', error);
+        return null;
+    }
+}
+
+export async function initApp() {
+    console.log('Inicializando aplicação...');
+    
+    // Verificar URL atual para navegação direta
+    const hash = window.location.hash;
+    const path = hash.substring(1); // Remove o #
+    
+    if (path.startsWith('details/')) {
+        const bookId = path.split('/')[1];
+        if (bookId && !isNaN(bookId)) {
+            const user = await checkAuthStatus();
+            if (user) {
+                navigateTo('details', { bookId: parseInt(bookId), user });
+                return;
+            }
+        }
+    }
+    
+    // Verificar autenticação para outras rotas
+    const user = await checkAuthStatus();
+    
+    if (user) {
+        console.log('Usuário logado:', user.nome);
+        // Navegar baseado no tipo de usuário e URL atual
+        if (path === 'admin' && user.tipo === 'admin') {
+            navigateTo('admin', { user });
+        } else if (path === 'profile') {
+            navigateTo('profile', { user });
+        } else if (path === 'dashboard') {
+            navigateTo('dashboard', { user });
+        } else if (path === 'shelves') {
+            navigateTo('shelves', { user });
+        } else {
+            navigateTo('books', { user });
+        }
+    } else {
+        console.log('Usuário não logado, redirecionando para login');
         navigateTo('login');
     }
 }
 
 export async function navigateTo(screen, params = {}) {
-    const user = params.user; // O usuário é passado como parâmetro da função que chamou a navegação
-
-    // Se a tela não for login/cadastro e o usuário não foi passado, tenta buscar
-    // Isso acontece quando o usuário navega por links (ex: "/books")
+    console.log('Navegando para:', screen, 'Parâmetros:', params);
+    
+    let user = params.user;
+    
+    // Se não temos usuário nos parâmetros e não é uma tela pública, verificar autenticação
     if (!user && screen !== 'login' && screen !== 'register') {
-        const response = await fetch('http://localhost:3000/api/profile', {
-            credentials: 'include'
-        });
-        if (response.ok) {
-            params.user = await response.json();
-        } else {
-            // Se a sessão expirou, redireciona para o login
-            screen = 'login';
+        user = await checkAuthStatus();
+        if (!user) {
+            console.log('Sessão expirada, redirecionando para login');
+            navigateTo('login');
+            return;
+        }
+        params.user = user;
+    }
+
+    // Atualizar URL no navegador
+    if (screen === 'details' && params.bookId) {
+        window.history.pushState({}, '', `#details/${params.bookId}`);
+    } else if (screen !== 'login' && screen !== 'register') {
+        window.history.pushState({}, '', `#${screen}`);
+    } else {
+        window.history.pushState({}, '', '#');
+    }
+
+    // Limpar container apropriado
+    if (screen === 'login' || screen === 'register') {
+        // Para login/register, limpar toda a app
+        app.innerHTML = '';
+    } else {
+        // Para outras telas, verificar se shell existe
+        if (!document.querySelector('.shell-header')) {
+            await createShell(app);
+        }
+        
+        const content = document.querySelector('.content');
+        if (content) {
+            content.innerHTML = '';
         }
     }
 
-    // Cria shell apenas em telas que não sejam login ou registro
-    if (!document.querySelector('.shell-header') && screen !== 'login' && screen !== 'register') {
-        await createShell(app);
+    // Renderizar tela apropriada
+    const container = (screen === 'login' || screen === 'register') ? app : document.querySelector('.content');
+    
+    if (!container) {
+        console.error('Container não encontrado para a tela:', screen);
+        return;
     }
 
-    // Limpa o conteúdo da tela
-    const content = document.querySelector('.content');
-    if (screen === 'login' || screen === 'register') {
-        app.innerHTML = ''; // Limpar toda a div app para login/cadastro
-    } else if (content) {
-        content.innerHTML = '';
-    }
-
-    switch (screen) {
-        case 'login':
-            renderLoginPage(app);
-            break;
-        case 'register':
-            renderUserRegistration(app);
-            break;
-        case 'books':
-            renderBookList(content);
-            break;
-        case 'details':
-            await createShell(app); // Garante que a shell exista
-            const detailsContent = document.querySelector('.content'); // Pega o container de conteúdo
-            renderBookDetails(detailsContent, params.bookId);
-            break;
-        case 'dashboard':
-            renderUserDashboard(content);
-            break;
-        case 'profile':
-            renderUserProfile(content);
-            break;
-        case 'shelves':
-            renderShelves(content);
-            break;
-        case 'admin':
-            if (params.user?.tipo === 'admin') {
-                renderAdminPanel(content);
-            } else {
-                alert('Acesso negado!');
-                renderBookList(content);
-            }
-            break;
-        default:
-            renderBookList(content);
+    try {
+        switch (screen) {
+            case 'login':
+                renderLoginPage(container);
+                break;
+                
+            case 'register':
+                renderUserRegistration(container);
+                break;
+                
+            case 'books':
+                await renderBookList(container);
+                updateActiveFooterButton('books');
+                break;
+                
+            case 'details':
+                if (params.bookId) {
+                    await renderBookDetails(container, params.bookId);
+                } else {
+                    console.error('BookId não fornecido para detalhes');
+                    navigateTo('books', params);
+                }
+                break;
+                
+            case 'dashboard':
+                await renderUserDashboard(container);
+                updateActiveFooterButton('dashboard');
+                break;
+                
+            case 'profile':
+                await renderUserProfile(container);
+                updateActiveFooterButton('profile');
+                break;
+                
+            case 'shelves':
+                await renderShelves(container);
+                updateActiveFooterButton('shelves');
+                break;
+                
+            case 'admin':
+                if (user && user.tipo === 'admin') {
+                    await renderAdminPanel(container);
+                } else {
+                    console.error('Acesso negado ao painel admin');
+                    alert('Acesso negado!');
+                    navigateTo('books', params);
+                }
+                break;
+                
+            default:
+                console.log('Tela não reconhecida, redirecionando para books');
+                navigateTo('books', params);
+        }
+    } catch (error) {
+        console.error('Erro ao renderizar tela:', error);
+        container.innerHTML = `
+            <div class="no-books">
+                <h3>Erro ao carregar página</h3>
+                <p>Ocorreu um erro inesperado. Tente novamente.</p>
+                <button onclick="location.reload()" class="btn">Recarregar</button>
+            </div>
+        `;
     }
 }
 
-// Inicializa app
-initApp();
+// Função para atualizar botão ativo no footer
+function updateActiveFooterButton(screen) {
+    const footerButtons = document.querySelectorAll('.footer-btn');
+    footerButtons.forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.target === screen) {
+            btn.classList.add('active');
+        }
+    });
+}
+
+// Manipular navegação do navegador (botões voltar/avançar)
+window.addEventListener('popstate', () => {
+    const hash = window.location.hash.substring(1);
+    if (hash.startsWith('details/')) {
+        const bookId = hash.split('/')[1];
+        if (bookId && !isNaN(bookId)) {
+            navigateTo('details', { bookId: parseInt(bookId) });
+        }
+    } else if (hash) {
+        navigateTo(hash);
+    } else {
+        navigateTo('books');
+    }
+});
+
+// Interceptar cliques em links internos
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href^="#"]');
+    if (link) {
+        e.preventDefault();
+        const href = link.getAttribute('href').substring(1);
+        if (href) {
+            navigateTo(href);
+        }
+    }
+});
+
+// Função utilitária para logout
+export async function performLogout() {
+    try {
+        await fetch('http://localhost:3000/api/logout', { 
+            method: 'POST',
+            credentials: 'include'
+        });
+        console.log('Logout realizado com sucesso');
+    } catch (error) {
+        console.error('Erro ao fazer logout:', error);
+    }
+    
+    // Limpar estado local
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Redirecionar para login
+    navigateTo('login');
+}
+
+// Função utilitária para mostrar loading
+export function showLoading(container, message = 'Carregando...') {
+    if (container) {
+        container.innerHTML = `<div class="loading">${message}</div>`;
+    }
+}
+
+// Função utilitária para mostrar erro
+export function showError(container, message = 'Ocorreu um erro') {
+    if (container) {
+        container.innerHTML = `
+            <div class="no-books">
+                <h3>Erro</h3>
+                <p>${message}</p>
+                <button onclick="location.reload()" class="btn">Tentar Novamente</button>
+            </div>
+        `;
+    }
+}
+
+// Inicializar aplicação quando DOM estiver pronto
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
+}
+
+console.log('main.js carregado');

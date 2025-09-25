@@ -10,13 +10,26 @@ function createPlaceholderSVG(title = 'Sem Capa') {
 }
 
 export async function renderBookList(container) {
-    container.innerHTML = '';
+    container.innerHTML = '<div class="loading">Carregando livros...</div>';
 
     let books = [];
+    let currentUser = null;
+    
+    try {
+        // Verificar se o usuário está logado
+        const userResponse = await fetch('http://localhost:3000/api/profile', {
+            credentials: 'include'
+        });
+        if (userResponse.ok) {
+            currentUser = await userResponse.json();
+            console.log('Usuário logado:', currentUser.nome);
+        }
+    } catch (error) {
+        console.log('Usuário não logado');
+    }
+
     try {
         console.log('Fazendo requisição para buscar livros...');
-        console.log('URL da requisição:', 'http://localhost:3000/api/books');
-        console.log('Cookies disponíveis:', document.cookie);
         
         let response = await fetch('http://localhost:3000/api/books', {
             credentials: 'include',
@@ -27,60 +40,51 @@ export async function renderBookList(container) {
         });
         
         console.log('Status da resposta:', response.status);
-        console.log('Headers da resposta:', [...response.headers.entries()]);
-        
-        if (response.status === 401) {
-            console.warn('Tentativa com credentials falhou, tentando sem credentials...');
-            
-            response = await fetch('http://localhost:3000/api/books', {
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            console.log('Status da segunda tentativa:', response.status);
-        }
         
         if (response.ok) {
             books = await response.json();
-            console.log('Livros recebidos:', books);
-            console.log('Número de livros:', books.length);
-            
-            if (books.length > 0) {
-                console.log('Estrutura do primeiro livro:', books[0]);
-                console.log('Propriedades do primeiro livro:', Object.keys(books[0]));
-            }
+            console.log('Livros recebidos:', books.length);
         } else if (response.status === 401) {
-            const errorText = await response.text();
-            console.error('Erro de autenticação (401) persistente:', errorText);
-            
+            // Usuário não logado, mostrar interface de login
             container.innerHTML = `
                 <div class="no-books" style="text-align: center; padding: 40px;">
-                    <h3>Acesso Negado</h3>
-                    <p>Você precisa fazer login para acessar os livros.</p>
-                    <button id="go-to-login" style="margin-top: 10px; padding: 8px 16px; background: #9bb4ff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    <h3>Bem-vindo ao Librain!</h3>
+                    <p>Para acessar o catálogo de livros, você precisa fazer login.</p>
+                    <button id="go-to-login" class="btn" style="margin-top: 10px;">
                         Fazer Login
+                    </button>
+                    <br>
+                    <button id="go-to-register" class="btn-secondary" style="margin-top: 10px;">
+                        Criar Conta
                     </button>
                 </div>
             `;
             
             const loginBtn = container.querySelector('#go-to-login');
-            if (loginBtn && typeof navigateTo === 'function') {
-                loginBtn.addEventListener('click', () => {
-                    navigateTo('login');
-                });
+            const registerBtn = container.querySelector('#go-to-register');
+            
+            if (loginBtn) {
+                loginBtn.addEventListener('click', () => navigateTo('login'));
+            }
+            if (registerBtn) {
+                registerBtn.addEventListener('click', () => navigateTo('register'));
             }
             return;
         } else {
             const errorText = await response.text();
             console.error('Falha ao carregar livros:', response.status, response.statusText, errorText);
-            container.innerHTML = '<div class="no-books">Erro ao carregar a lista de livros.</div>';
+            container.innerHTML = '<div class="no-books">Erro ao carregar a lista de livros. Tente fazer login novamente.</div>';
             return;
         }
     } catch (error) {
         console.error('Erro de rede:', error);
-        container.innerHTML = '<div class="no-books">Não foi possível conectar ao servidor.</div>';
+        container.innerHTML = `
+            <div class="no-books">
+                <h3>Erro de Conexão</h3>
+                <p>Não foi possível conectar ao servidor. Verifique sua conexão com a internet e se o servidor está rodando.</p>
+                <button onclick="location.reload()" class="btn">Tentar Novamente</button>
+            </div>
+        `;
         return;
     }
 
@@ -92,18 +96,33 @@ export async function renderBookList(container) {
 
     if (books.length === 0) {
         console.warn('Nenhum livro encontrado no banco de dados');
-        container.innerHTML = '<div class="no-books">Nenhum livro encontrado no sistema.</div>';
+        container.innerHTML = `
+            <div class="no-books">
+                <h3>Nenhum livro encontrado</h3>
+                <p>O catálogo está vazio no momento.</p>
+                ${currentUser && currentUser.tipo === 'admin' ? 
+                    '<p><em>Como administrador, você pode adicionar livros ao sistema.</em></p>' : 
+                    ''
+                }
+            </div>
+        `;
         return;
     }
 
+    // Renderizar interface principal
     const mainEl = document.createElement('div');
     mainEl.innerHTML = `
+        <div class="books-header">
+            <h2>Catálogo de Livros</h2>
+            ${currentUser ? `<p>Bem-vindo, ${currentUser.nome}!</p>` : ''}
+        </div>
         <div class="search-row">
-            <input id="search-input" placeholder="Pesquisar título ou autor...">
-            <button id="search-clear">✖ Limpar</button>
+            <input id="search-input" placeholder="Pesquisar título ou autor..." type="text">
+            <button id="search-clear" title="Limpar busca">✖</button>
         </div>
         <div id="books-container"></div>
     `;
+    container.innerHTML = '';
     container.appendChild(mainEl);
 
     const searchInput = mainEl.querySelector('#search-input');
@@ -120,11 +139,9 @@ export async function renderBookList(container) {
             return;
         }
 
+        // Agrupar livros por gênero
         const livrosPorGenero = allBooks.reduce((acc, book) => {
-            console.log('Processando livro:', book.title, 'Gênero:', book.genre);
-            
             const genero = book.genre || 'Sem Gênero';
-            
             if (!acc[genero]) {
                 acc[genero] = [];
             }
@@ -132,10 +149,15 @@ export async function renderBookList(container) {
             return acc;
         }, {});
 
-        console.log('Livros agrupados por gênero:', livrosPorGenero);
+        // Ordenar gêneros alfabeticamente, mas colocar "Sem Gênero" no final
+        const generosOrdenados = Object.keys(livrosPorGenero).sort((a, b) => {
+            if (a === 'Sem Gênero') return 1;
+            if (b === 'Sem Gênero') return -1;
+            return a.localeCompare(b);
+        });
 
-        Object.entries(livrosPorGenero).forEach(([genero, livrosDoGenero]) => {
-            console.log(`Renderizando gênero: ${genero} com ${livrosDoGenero.length} livros`);
+        generosOrdenados.forEach(genero => {
+            const livrosDoGenero = livrosPorGenero[genero];
             
             if (!livrosDoGenero.length) return;
 
@@ -150,11 +172,18 @@ export async function renderBookList(container) {
             carousel.className = 'books-carousel';
 
             livrosDoGenero.forEach(book => {
-                console.log('Criando card para livro:', book.title);
-                
                 const card = document.createElement('div');
                 card.className = 'book-card';
                 card.setAttribute('data-book-id', book.id);
+                
+                // Status do livro
+                const isAvailable = book.available !== false;
+                const statusClass = isAvailable ? 'available' : 'unavailable';
+                const statusText = isAvailable ? 'Disponível' : 'Emprestado';
+                
+                // Média de avaliações
+                const avgRating = book.avgRating ? parseFloat(book.avgRating).toFixed(1) : null;
+                const reviewCount = book.reviewCount || 0;
                 
                 const img = document.createElement('img');
                 img.alt = book.title || 'Livro';
@@ -180,10 +209,25 @@ export async function renderBookList(container) {
                 bookAuthor.className = 'book-author';
                 bookAuthor.textContent = book.author || 'Autor desconhecido';
                 
+                const bookStatus = document.createElement('div');
+                bookStatus.className = `book-status ${statusClass}`;
+                bookStatus.textContent = statusText;
+                
+                const bookRating = document.createElement('div');
+                bookRating.className = 'book-rating';
+                if (avgRating) {
+                    bookRating.innerHTML = `⭐ ${avgRating} (${reviewCount})`;
+                } else {
+                    bookRating.innerHTML = `<span style="color: #999;">Sem avaliações</span>`;
+                }
+                
                 card.appendChild(img);
                 card.appendChild(bookTitle);
                 card.appendChild(bookAuthor);
+                card.appendChild(bookStatus);
+                card.appendChild(bookRating);
                 
+                // Event listener para clicar no livro
                 card.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -198,6 +242,17 @@ export async function renderBookList(container) {
                     }
                 });
 
+                // Hover effect
+                card.addEventListener('mouseenter', () => {
+                    card.style.transform = 'translateY(-2px)';
+                    card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                });
+                
+                card.addEventListener('mouseleave', () => {
+                    card.style.transform = 'translateY(0)';
+                    card.style.boxShadow = '';
+                });
+
                 carousel.appendChild(card);
             });
 
@@ -207,18 +262,23 @@ export async function renderBookList(container) {
         });
     }
 
+    // Renderizar todos os livros inicialmente
     renderSections(books);
 
+    // Função de busca
     function doSearch() {
-        const q = (searchInput.value || '').trim().toLowerCase();
-        console.log('Fazendo busca por:', q);
+        const query = (searchInput.value || '').trim().toLowerCase();
+        console.log('Fazendo busca por:', query);
         
-        if (q) {
+        if (query) {
             const filteredBooks = books.filter(book => {
                 const title = (book.title || '').toLowerCase();
                 const author = (book.author || '').toLowerCase();
-                const match = title.includes(q) || author.includes(q);
-                return match;
+                const genre = (book.genre || '').toLowerCase();
+                
+                return title.includes(query) || 
+                       author.includes(query) || 
+                       genre.includes(query);
             });
             console.log('Livros filtrados:', filteredBooks.length);
             renderSections(filteredBooks);
@@ -227,7 +287,9 @@ export async function renderBookList(container) {
         }
     }
 
+    // Event listeners para busca
     searchInput.addEventListener('input', doSearch);
+    
     searchClear.addEventListener('click', () => {
         searchInput.value = '';
         doSearch();
@@ -236,9 +298,16 @@ export async function renderBookList(container) {
 
     searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
+            e.preventDefault();
             doSearch();
         }
     });
 
+    // Auto-focus no campo de busca se não estiver em mobile
+    if (window.innerWidth > 768) {
+        searchInput.focus();
+    }
+
     console.log('renderBookList concluído. Total de livros:', books.length);
+    console.log('Usuário atual:', currentUser ? currentUser.nome : 'Não logado');
 }
