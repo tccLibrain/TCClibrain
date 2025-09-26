@@ -284,7 +284,7 @@ function renderShelvesContent(container, user, books, userShelves) {
                 
                 .create-shelf-form input {
                     min-width: auto;
-                    width: 100%;
+                    width: 90%;
                 }
             }
         </style>

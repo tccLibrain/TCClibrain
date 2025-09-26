@@ -1,4 +1,4 @@
-import { navigateTo, performLogout, showLoading, showError } from '../main.js';
+import { navigateTo, showLoading, showError } from '../main.js';
 
 export async function renderUserDashboard(container) {
     console.log('Carregando dashboard do usuário...');
@@ -198,6 +198,7 @@ function renderDashboardContent(container, user, dashboardData) {
                 background: var(--branco);
                 border-radius: 12px;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                margin-top: 15px;
             }
             
             .dashboard-header h1 {
@@ -207,15 +208,7 @@ function renderDashboardContent(container, user, dashboardData) {
             
             .dashboard-header .user-greeting {
                 color: var(--azul-original);
-                font-size: 16px;
-            }
-            
-            .dashboard-navigation {
-                display: flex;
-                gap: 10px;
-                justify-content: center;
-                flex-wrap: wrap;
-                margin-bottom: 20px;
+                font-size: 18px;
             }
             
             .dashboard-section {
@@ -224,6 +217,7 @@ function renderDashboardContent(container, user, dashboardData) {
                 padding: 20px;
                 margin-bottom: 20px;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+
             }
             
             .dashboard-section h2 {
@@ -354,6 +348,7 @@ function renderDashboardContent(container, user, dashboardData) {
             
             .stat-item {
                 text-align: center;
+                background: var(branco);
             }
             
             .stat-number {
@@ -385,13 +380,6 @@ function renderDashboardContent(container, user, dashboardData) {
         <div class="dashboard-header">
             <h1>Meu Dashboard</h1>
             <div class="user-greeting">Bem-vindo, ${user.nome}!</div>
-        </div>
-
-        <div class="dashboard-navigation">
-            <button id="voltar-livros" class="btn">Explorar Livros</button>
-            <button id="minhas-prateleiras" class="btn">Minhas Prateleiras</button>
-            <button id="meu-perfil" class="btn">Meu Perfil</button>
-            <button id="logout" class="btn btn-secondary">Sair</button>
         </div>
 
         <div class="stats-summary">
@@ -442,7 +430,6 @@ function setupDashboardEventListeners(container, user) {
     const voltarLivros = container.querySelector('#voltar-livros');
     const minhasPrateleiras = container.querySelector('#minhas-prateleiras');
     const meuPerfil = container.querySelector('#meu-perfil');
-    const logoutBtn = container.querySelector('#logout');
 
     if (voltarLivros) {
         voltarLivros.addEventListener('click', () => navigateTo('books', { user }));
@@ -454,10 +441,6 @@ function setupDashboardEventListeners(container, user) {
 
     if (meuPerfil) {
         meuPerfil.addEventListener('click', () => navigateTo('profile', { user }));
-    }
-
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', performLogout);
     }
 
     // Botões de ação nos itens
@@ -514,7 +497,317 @@ function setupDashboardEventListeners(container, user) {
                         const error = await response.json();
                         alert(`Erro: ${error.error || 'Erro desconhecido'}`);
                     }
-                } catch (error) {
+                } catch (error) {// Na função renderDashboardContent, remover esta seção do HTML:
+
+                    container.innerHTML = `
+                        <style>
+                            .dashboard-header {
+                                text-align: center;
+                                margin-bottom: 20px;
+                                padding: 20px;
+                                background: var(--branco);
+                                border-radius: 12px;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                                margin-top: 15px;
+                            }
+                            
+                            .dashboard-header h1 {
+                                color: var(--azul-escuro);
+                                margin: 0 0 10px 0;
+                            }
+                            
+                            .dashboard-header .user-greeting {
+                                color: var(--azul-original);
+                                font-size: 18px;
+                            }
+                            
+                            .dashboard-section {
+                                background: var(--branco);
+                                border-radius: 12px;
+                                padding: 20px;
+                                margin-bottom: 20px;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                            }
+                            
+                            .dashboard-section h2 {
+                                color: var(--azul-escuro);
+                                margin: 0 0 15px 0;
+                                padding-bottom: 10px;
+                                border-bottom: 2px solid var(--cinza-claro);
+                            }
+                            
+                            .dashboard-item {
+                                display: flex;
+                                justify-content: space-between;
+                                align-items: center;
+                                padding: 15px 0;
+                                border-bottom: 1px solid var(--cinza-claro);
+                            }
+                            
+                            .dashboard-item:last-child {
+                                border-bottom: none;
+                            }
+                            
+                            .item-info {
+                                flex: 1;
+                            }
+                            
+                            .item-info strong {
+                                display: block;
+                                color: var(--azul-escuro);
+                                font-size: 16px;
+                                margin-bottom: 4px;
+                            }
+                            
+                            .item-author {
+                                display: block;
+                                color: var(--azul-claro);
+                                font-size: 14px;
+                                margin-bottom: 4px;
+                            }
+                            
+                            .item-date, .item-position {
+                                display: block;
+                                color: var(--cinza-escuro);
+                                font-size: 12px;
+                                margin-bottom: 4px;
+                            }
+                            
+                            .item-status {
+                                display: inline-block;
+                                padding: 2px 8px;
+                                border-radius: 10px;
+                                font-size: 11px;
+                                font-weight: bold;
+                                text-transform: uppercase;
+                            }
+                            
+                            .status-active {
+                                background-color: #d4edda;
+                                color: #155724;
+                            }
+                            
+                            .status-pending {
+                                background-color: #fff3cd;
+                                color: #856404;
+                            }
+                            
+                            .status-waiting {
+                                background-color: #cce7ff;
+                                color: #004085;
+                            }
+                            
+                            .item-actions {
+                                display: flex;
+                                gap: 8px;
+                                flex-wrap: wrap;
+                            }
+                            
+                            .btn-small {
+                                padding: 6px 12px;
+                                font-size: 12px;
+                                border: none;
+                                border-radius: 6px;
+                                cursor: pointer;
+                                transition: background-color 0.3s;
+                            }
+                            
+                            .btn-view {
+                                background-color: var(--azul-original);
+                                color: white;
+                            }
+                            
+                            .btn-view:hover {
+                                background-color: var(--azul-escuro);
+                            }
+                            
+                            .btn-devolver {
+                                background-color: #28a745;
+                                color: white;
+                            }
+                            
+                            .btn-devolver:hover {
+                                background-color: #218838;
+                            }
+                            
+                            .btn-danger {
+                                background-color: #dc3545;
+                                color: white;
+                            }
+                            
+                            .btn-danger:hover {
+                                background-color: #c82333;
+                            }
+                            
+                            .no-items {
+                                text-align: center;
+                                color: var(--azul-claro);
+                                font-style: italic;
+                                padding: 20px;
+                            }
+                            
+                            .stats-summary {
+                                display: flex;
+                                justify-content: space-around;
+                                background: var(--cinza-claro);
+                                padding: 15px;
+                                border-radius: 8px;
+                                margin-bottom: 15px;
+                            }
+                            
+                            .stat-item {
+                                text-align: center;
+                            }
+                            
+                            .stat-number {
+                                font-size: 24px;
+                                font-weight: bold;
+                                color: var(--azul-escuro);
+                                display: block;
+                            }
+                            
+                            .stat-label {
+                                font-size: 12px;
+                                color: var(--azul-claro);
+                            }
+                            
+                            @media (max-width: 768px) {
+                                .dashboard-item {
+                                    flex-direction: column;
+                                    align-items: flex-start;
+                                    gap: 10px;
+                                }
+                                
+                                .item-actions {
+                                    align-self: stretch;
+                                    justify-content: center;
+                                }
+                            }
+                        </style>
+                        
+                        <div class="dashboard-header">
+                            <h1>Meu Dashboard</h1>
+                            <div class="user-greeting">Bem-vindo, ${user.nome}!</div>
+                        </div>
+                    
+                        <div class="stats-summary">
+                            <div class="stat-item">
+                                <span class="stat-number">${emprestados.length}</span>
+                                <span class="stat-label">Empréstimos</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${reservas.length}</span>
+                                <span class="stat-label">Reservas</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${user.livros_lidos || 0}</span>
+                                <span class="stat-label">Livros Lidos</span>
+                            </div>
+                        </div>
+                    
+                        <div class="dashboard-section">
+                            <h2>Meus Empréstimos Ativos</h2>
+                            <ul style="list-style: none; padding: 0;">
+                                ${emprestimosHtml}
+                            </ul>
+                        </div>
+                    
+                        <div class="dashboard-section">
+                            <h2>Minhas Reservas</h2>
+                            <ul style="list-style: none; padding: 0;">
+                                ${reservasHtml}
+                            </ul>
+                        </div>
+                    
+                        ${devolucoesPendentes.length > 0 ? `
+                            <div class="dashboard-section">
+                                <h2>Devoluções Pendentes</h2>
+                                <ul style="list-style: none; padding: 0;">
+                                    ${pendentesHtml}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    `;
+                    
+                    // E na função setupDashboardEventListeners, remover estas partes:
+                    
+                    function setupDashboardEventListeners(container, user) {
+                        // Remover toda esta seção:
+                        // const voltarLivros = container.querySelector('#voltar-livros');
+                        // const minhasPrateleiras = container.querySelector('#minhas-prateleiras');
+                        // const meuPerfil = container.querySelector('#meu-perfil');
+                    
+                        // if (voltarLivros) {
+                        //     voltarLivros.addEventListener('click', () => navigateTo('books', { user }));
+                        // }
+                    
+                        // if (minhasPrateleiras) {
+                        //     minhasPrateleiras.addEventListener('click', () => navigateTo('shelves', { user }));
+                        // }
+                    
+                        // if (meuPerfil) {
+                        //     meuPerfil.addEventListener('click', () => navigateTo('profile', { user }));
+                        // }
+                    
+                        // Manter apenas os botões de ação nos itens
+                        container.addEventListener('click', async (e) => {
+                            const bookId = e.target.dataset.bookid;
+                            
+                            if (e.target.classList.contains('btn-view') && bookId) {
+                                navigateTo('details', { bookId: parseInt(bookId), user });
+                            }
+                            
+                            else if (e.target.classList.contains('btn-devolver') && bookId) {
+                                if (confirm('Deseja realmente solicitar a devolução deste livro?')) {
+                                    try {
+                                        const response = await fetch('http://localhost:3000/api/loan/request-return', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            credentials: 'include',
+                                            body: JSON.stringify({ bookId: parseInt(bookId) })
+                                        });
+                                        
+                                        if (response.ok) {
+                                            const result = await response.json();
+                                            alert(result.message || 'Solicitação de devolução enviada!');
+                                            renderUserDashboard(container);
+                                        } else {
+                                            const error = await response.json();
+                                            alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                                        }
+                                    } catch (error) {
+                                        console.error('Erro ao solicitar devolução:', error);
+                                        alert('Erro de conexão ao solicitar devolução.');
+                                    }
+                                }
+                            }
+                            
+                            else if (e.target.classList.contains('btn-cancelar-reserva') && bookId) {
+                                if (confirm('Deseja realmente cancelar esta reserva?')) {
+                                    try {
+                                        const response = await fetch('http://localhost:3000/api/loan/cancel-request', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            credentials: 'include',
+                                            body: JSON.stringify({ bookId: parseInt(bookId) })
+                                        });
+                                        
+                                        if (response.ok) {
+                                            const result = await response.json();
+                                            alert(result.message || 'Reserva cancelada!');
+                                            renderUserDashboard(container);
+                                        } else {
+                                            const error = await response.json();
+                                            alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                                        }
+                                    } catch (error) {
+                                        console.error('Erro ao cancelar reserva:', error);
+                                        alert('Erro de conexão ao cancelar reserva.');
+                                    }
+                                }
+                            }
+                        });
+                    }
                     console.error('Erro ao cancelar reserva:', error);
                     alert('Erro de conexão ao cancelar reserva.');
                 }

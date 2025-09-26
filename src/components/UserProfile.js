@@ -50,6 +50,8 @@ export async function renderUserProfile(container) {
                 padding-left: 0;
             }
             
+            
+            /* Correção para o container do fundo do perfil */
             .containerFundoPerfil {
                 position: relative;
                 width: 100%;
@@ -64,27 +66,45 @@ export async function renderUserProfile(container) {
                 border-bottom-right-radius: 20px;
             }
 
+            /* Container do avatar - centralizado e com tamanho adequado */
             .avatar-edit {
                 cursor: pointer;
                 position: relative;
-                display: inline-block;
-                border-radius: 50%;
+                display: inline-flex;
+                justify-content: center;
+                align-items: center;
+                width: 130px;
+                height: 130px;
+                border-radius: 60%;
                 overflow: hidden;
                 border: 4px solid #fff;
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
                 transition: transform 0.3s ease;
+                background: #f0f0f0; /* fallback caso a imagem não carregue */
+                margin-left: 70%;
+                margin-top: 25px;
             }
 
             .avatar-edit:hover {
                 transform: scale(1.05);
             }
 
+            /* Imagem do avatar - ocupa todo o espaço do container */
             .profile-avatar {
-                width: 120px;
-                height: 120px;
+                width: 100%;
+                height: 100%;
                 object-fit: cover;
                 border-radius: 50%;
                 display: block;
+                border: none; /* remove qualquer borda adicional */
+            }
+
+            /* Garantir que o input file não interfira */
+            #avatar-input {
+                display: none !important;
+                position: absolute;
+                opacity: 0;
+                pointer-events: none;
             }
 
             .bio-textarea {
@@ -98,6 +118,7 @@ export async function renderUserProfile(container) {
                 font-size: 14px;
                 resize: vertical;
                 box-sizing: border-box;
+                background: var(--branco);
             }
             
             .bio-save-btn {
@@ -136,7 +157,7 @@ export async function renderUserProfile(container) {
             }
 
             .profile-info {
-                background-color: #CFD2DB;
+                background-color: #fff;
                 border-radius: 12px;
                 padding: 20px;
                 margin: 20px;
@@ -158,7 +179,7 @@ export async function renderUserProfile(container) {
             .profile-info p {
                 margin: 0;
                 color: #434E70;
-                font-size: 16px;
+                font-size: 20px;
                 line-height: 1.5;
                 cursor: pointer;
                 padding: 8px;
@@ -177,42 +198,105 @@ export async function renderUserProfile(container) {
                 margin: 20px auto;
             }
 
-            .profile-stats {
-                padding: 20px;
-                margin: 0;
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 20px;
-            }
+            /* Seção de estatísticas reformulada para uma única estatística */
+.profile-stats {
+    padding: 20px;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+}
 
-            .stat-item {
-                background-color: #f8f9fa;
-                border-radius: 12px;
-                padding: 20px;
-                text-align: center;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-                transition: transform 0.3s ease;
-            }
+.stat-item {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 20px;
+    padding: 30px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    width: 100%;
+    max-width: 400px;
+    border: 2px solid transparent;
+}
 
-            .stat-item:hover {
-                transform: translateY(-2px);
-            }
+.stat-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(67, 78, 112, 0.2);
+    border-color: #9bb4ff;
+}
 
-            .stat-item h3 {
-                margin: 0 0 10px 0;
-                color: #434E70;
-                font-family: arial black;
-                font-size: 18px;
-            }
+.stat-item h3 {
+    margin: 0 0 15px 0;
+    color: #434E70;
+    font-family: 'Arial Black', arial, sans-serif;
+    font-size: 24px;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+}
 
-            .stat-item p {
-                margin: 0;
-                color: #9bb4ff;
-                font-family: arial black;
-                font-size: 32px;
-                font-weight: bold;
-            }
+.stat-item p {
+    margin: 0;
+    color: #9bb4ff;
+    font-family: 'Arial Black', arial, sans-serif;
+    font-size: 48px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
 
+/* Efeito de brilho no número */
+.stat-item p::after {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #9bb4ff, transparent);
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.stat-item:hover p::after {
+    opacity: 1;
+}
+
+/* Versão alternativa mais compacta */
+.stat-item.compact {
+    padding: 20px;
+    max-width: 300px;
+}
+
+.stat-item.compact h3 {
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+
+.stat-item.compact p {
+    font-size: 36px;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .profile-stats {
+        padding: 15px;
+    }
+    
+    .stat-item {
+        padding: 25px 20px;
+        max-width: none;
+        width: calc(100% - 30px);
+        margin: 0 15px;
+    }
+    
+    .stat-item h3 {
+        font-size: 20px;
+    }
+    
+    .stat-item p {
+        font-size: 40px;
+    }
+}
             .profile-footer {
                 padding: 20px;
                 margin: 0;
@@ -310,10 +394,6 @@ export async function renderUserProfile(container) {
                 <div class="stat-item">
                     <h3>📚 Livros lidos</h3>
                     <p>${livrosLidos}</p>
-                </div>
-                <div class="stat-item">
-                    <h3>📖 Páginas lidas</h3>
-                    <p>${paginasLidas.toLocaleString('pt-BR')}</p>
                 </div>
             </div>
     
@@ -420,8 +500,8 @@ function setupEventListeners(user, container) {
                       placeholder="Escreva algo sobre você..."
                       maxlength="500">${currentBio}</textarea>
             <div style="text-align: center;">
-                <button id="saveBioBtn" class="bio-save-btn">✔️ Salvar</button>
-                <button id="cancelBioBtn" class="bio-cancel-btn">✖️ Cancelar</button>
+                <button id="saveBioBtn" class="bio-save-btn">✔ Salvar</button>
+                <button id="cancelBioBtn" class="bio-cancel-btn">✖ Cancelar</button>
             </div>
             <div id="bioMessage"></div>
         `;

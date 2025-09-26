@@ -56,7 +56,7 @@ export async function createShell(appContainer) {
         footerHtml = `
             <footer class="footer-nav">
                 <button class="footer-btn active" data-target="books" title="Explorar Livros">
-                    🏠<span>Início</span>
+                    🏠 <span>Início</span>
                 </button>
                 <button class="footer-btn" data-target="dashboard" title="Meus Empréstimos">
                     📊<span>Empréstimos</span>
@@ -72,6 +72,144 @@ export async function createShell(appContainer) {
     }
 
     appContainer.innerHTML = `
+        <style>
+    /* HEADER CORRIGIDO - VERSÃO FORÇADA */
+    .shell-header {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 0 16px !important;
+        height: 100px !important;
+        max-height: 100px !important;
+        background: var(--branco) !important;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+        position: fixed !important;
+        top: 0 !important;
+        width: 100% !important;
+        z-index: 1003 !important;
+        margin-bottom: 0 !important;
+    }
+
+    .header-left,
+    .header-center,
+    .header-right {
+        display: flex !important;
+        align-items: center !important;
+        flex: 1 1 0 !important;
+    }
+
+    .header-left {
+    justify-content: flex-start !important;
+}
+
+    .header-center {
+        justify-content: center !important;
+    }
+
+    .header-right {
+    justify-content: flex-end !important;
+    padding-right: 30px !important; /* Empurra o menu para dentro */
+}
+
+    /* Avatar do usuário à esquerda */
+    .shell-header .avatar {
+        width: 60px !important;
+        height: 60px !important;
+        max-height: 100px !important;
+        border-radius: 50% !important;
+        object-fit: cover !important;
+    }
+
+    /* Logo centralizado */
+    .shell-header .logo {
+        height: 80px !important;
+        max-height: 100px !important;
+        object-fit: contain !important;
+    }
+
+    /* Botão de menu à direita */
+    .menu-btn {
+        font-size: 24px !important;
+        background: var(--azul-escuro) !important;
+        color: #fff !important;
+        border: none !important;
+        border-radius: 6px !important;
+        padding: 6px 12px !important;
+        cursor: pointer !important;
+    }
+
+    .menu-header {
+        text-align: center;
+        padding: 20px 0;
+        border-bottom: 1px solid #444;
+        margin-bottom: 10px;
+    }
+    
+    #menu-wrapper nav a {
+        display: block;
+        padding: 15px 20px;
+        color: #fff;
+        font-size: 16px;
+        text-decoration: none;
+        border-left: 3px solid transparent;
+        transition: all 0.3s ease;
+    }
+    
+    #menu-wrapper nav a:hover {
+        background-color: #333;
+        border-left-color: #9bb4ff;
+        padding-left: 25px;
+    }
+    
+    .footer-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 8px 4px;
+        min-height: 50px;
+        justify-content: center;
+    }
+    
+    .footer-btn span {
+        font-size: 10px;
+        margin-top: 2px;
+        line-height: 1;
+    }
+    
+    .avatar {
+        cursor: pointer;
+        transition: transform 0.2s ease;
+    }
+    
+    .avatar:hover {
+        transform: scale(1.1);
+    }
+    
+    .menu-btn {
+        transition: all 0.3s ease;
+    }
+    
+    .menu-btn:hover {
+        transform: scale(1.1);
+        background-color: var(--azul-original);
+    }
+    
+    @media (max-width: 768px) {
+        .header-left, .header-right {
+            margin: 0 8px !important;
+        }
+        
+        .shell-header .avatar {
+            width: 45px !important;
+            height: 45px !important;
+        }
+        
+        .footer-btn span {
+            font-size: 9px;
+        }
+    }
+        </style>
+
         <header class="shell-header">
             <div class="header-left">
                 <img src="${avatarUrl}" alt="Avatar de ${user?.nome || 'Usuário'}" class="avatar" id="avatar-img" title="${user?.nome || 'Usuário'}"/>
@@ -102,30 +240,7 @@ export async function createShell(appContainer) {
 
         ${footerHtml}
         
-        <style>
-            .menu-header {
-                text-align: center;
-                padding: 20px 0;
-                border-bottom: 1px solid #444;
-                margin-bottom: 10px;
-            }
-            
-            #menu-wrapper nav a {
-                display: block;
-                padding: 15px 20px;
-                color: #fff;
-                font-size: 16px;
-                text-decoration: none;
-                border-left: 3px solid transparent;
-                transition: all 0.3s ease;
-            }
-            
-            #menu-wrapper nav a:hover {
-                background-color: #333;
-                border-left-color: #9bb4ff;
-                padding-left: 25px;
-            }
-            
+        ´<style> 
             .footer-btn {
                 display: flex;
                 flex-direction: column;

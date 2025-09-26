@@ -99,7 +99,7 @@ function injectCSS() {
         }
         
         .registration-form input::placeholder {
-            color: #5e3366;
+            color: #434E70;
             opacity: 0.7;
         }
         

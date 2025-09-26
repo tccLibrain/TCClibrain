@@ -1,4 +1,5 @@
 import { navigateTo } from '../main.js';
+import folhaLogin from '../images/folhaLogin.png';
 
 function createPlaceholderSVG(title = 'Sem Capa') {
     return `data:image/svg+xml;base64,${btoa(`
@@ -112,7 +113,7 @@ export async function renderBookList(container) {
     // Renderizar interface principal
     const mainEl = document.createElement('div');
     mainEl.innerHTML = `
-        <div class="books-header">
+        <div class="books-header" style="background-image: url('${folhaLogin}');">
             <h2>Catálogo de Livros</h2>
             ${currentUser ? `<p>Bem-vindo, ${currentUser.nome}!</p>` : ''}
         </div>

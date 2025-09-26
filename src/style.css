@@ -23,46 +23,7 @@ body {
   width: 100%;
   padding-bottom: 70px;
   position: relative;
-}
-
-/* Header */
-.shell-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 16px;
-  height: 100px;
-  max-height: 100px;
-  background: var(--branco);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-  position: fixed;
-  top: 0;
-  width: 100%;
-  z-index: 1003;
-  margin-bottom: 0;
-}
-
-.header-left,
-.header-center,
-.header-right {
-  display: flex;
-  align-items: center;
-}
-
-.header-left {
-  flex: 0 0 auto;
-  margin-left: 0px;
-}
-
-.header-center {
-  flex: 1;
-  justify-content: center;
-}
-
-.header-right {
-  flex: 0 0 auto;
-  margin-right: 32px;
-}
+} 
 
 /* Avatar do usuário à esquerda */
 .shell-header .avatar {
@@ -425,7 +386,8 @@ ul li em {
   line-height: 1.3;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  line-clamp: 2;              /* <- padrão */
+  -webkit-line-clamp: 2;      /* <- compatibilidade com navegadores WebKit */
   -webkit-box-orient: vertical;
 }
 
@@ -435,7 +397,8 @@ ul li em {
   color: var(--azul-claro);
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 1;
+  line-clamp: 1;              /* <- padrão */
+  -webkit-line-clamp: 1;      /* <- compatibilidade com navegadores WebKit */
   -webkit-box-orient: vertical;
 }
 
@@ -487,11 +450,53 @@ ul li em {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.book-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 20px;
-  margin-bottom: 20px;
+/* Estilos para o cabeçalho do catálogo de livros */
+.books-header {
+  background: var(--branco);
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  margin-top: 10px;
+}
+
+.books-header h2 {
+  margin: 0 0 8px 0;
+  color: var(--azul-escuro);
+  font-size: 24px;
+  font-weight: bold;
+  padding-left: 12px;
+  display: inline-block;
+}
+
+.books-header p {
+  margin: 0;
+  color: var(--azul-original);
+  font-size: 16px;
+  font-weight: normal;
+}
+
+/* Versão alternativa com gradiente sutil */
+.books-header.gradient {
+  background: linear-gradient(135deg, var(--branco) 0%, var(--cinza-claro) 100%);
+  border: 1px solid var(--cinza-escuro);
+}
+
+/* Versão mais compacta para mobile */
+@media (max-width: 768px) {
+  .books-header {
+    padding: 15px;
+    margin-bottom: 12px;
+  }
+  
+  .books-header h2 {
+    font-size: 25px;
+  }
+  
+  .books-header p {
+    font-size: 17px;
+  }
 }
 
 .book-cover-large {
