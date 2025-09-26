@@ -1,13 +1,11 @@
 import { navigateTo } from '../main.js';
 
-// Função para criar imagem placeholder offline
 function createPlaceholderImage(title, width = 150, height = 210) {
-    const text = title ? title.substring(0, 8) : 'Sem Capa';
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
         <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
             <rect width="100%" height="100%" fill="#9dadb7"/>
             <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#ffffff" 
-                  text-anchor="middle" dominant-baseline="middle">${text}</text>
+                  text-anchor="middle" dominant-baseline="middle">${title?.substring(0, 8) || 'Livro'}</text>
         </svg>
     `)}`;
 }
@@ -15,11 +13,17 @@ function createPlaceholderImage(title, width = 150, height = 210) {
 export async function renderBookDetails(container, bookId) {
     console.log('Carregando detalhes do livro:', bookId);
     
-    // Mostrar loading
+    // Validar se bookId é válido
+    const validBookId = parseInt(bookId);
+    if (!validBookId || isNaN(validBookId)) {
+        console.error('BookId inválido:', bookId);
+        container.innerHTML = '<div class="no-books">ID do livro inválido.</div>';
+        return;
+    }
+    
     container.innerHTML = '<div class="loading">Carregando detalhes do livro...</div>';
     
     try {
-        // 1. Obter informações do usuário logado
         let currentUser = null;
         try {
             const currentUserResponse = await fetch('http://localhost:3000/api/profile', {
@@ -28,30 +32,33 @@ export async function renderBookDetails(container, bookId) {
             if (currentUserResponse.ok) {
                 currentUser = await currentUserResponse.json();
                 console.log('Usuário logado:', currentUser.nome);
-            } else {
-                console.log('Usuário não logado');
             }
         } catch (error) {
             console.log('Usuário não logado ou erro na API de perfil');
         }
 
-        // 2. Obter informações detalhadas do livro
-        const bookResponse = await fetch(`http://localhost:3000/api/books/${bookId}`, {
+        console.log('Fazendo requisição para:', `http://localhost:3000/api/books/${validBookId}`);
+        const bookResponse = await fetch(`http://localhost:3000/api/books/${validBookId}`, {
             credentials: 'include'
         });
         
+        console.log('Status da resposta:', bookResponse.status);
+        
         if (!bookResponse.ok) {
-            container.innerHTML = '<div class="no-books">Livro não encontrado.</div>';
+            if (bookResponse.status === 404) {
+                container.innerHTML = '<div class="no-books">Livro não encontrado.</div>';
+            } else {
+                container.innerHTML = '<div class="no-books">Erro ao carregar o livro.</div>';
+            }
             return;
         }
         
         const book = await bookResponse.json();
-        console.log('Dados do livro:', book);
+        console.log('Dados do livro recebidos:', book);
 
-        // 3. Obter todas as resenhas para este livro
         let allReviews = [];
         try {
-            const reviewsResponse = await fetch(`http://localhost:3000/api/reviews/${bookId}`, {
+            const reviewsResponse = await fetch(`http://localhost:3000/api/reviews/${validBookId}`, {
                 credentials: 'include'
             });
             if (reviewsResponse.ok) {
@@ -62,11 +69,10 @@ export async function renderBookDetails(container, bookId) {
             console.log('Erro ao carregar resenhas:', error);
         }
 
-        // 4. Obter as prateleiras personalizadas do usuário (se logado)
         let userShelves = [];
         if (currentUser) {
             try {
-                const shelvesResponse = await fetch(`http://localhost:3000/api/user/shelves`, {
+                const shelvesResponse = await fetch('http://localhost:3000/api/user/shelves', {
                     credentials: 'include'
                 });
                 if (shelvesResponse.ok) {
@@ -82,26 +88,32 @@ export async function renderBookDetails(container, bookId) {
         const ratings = allReviews.map(r => r.rating).filter(r => r && !isNaN(r));
         const avgRating = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null;
         
-        // Verificar se está favoritado (se usuário logado)
-        const isFavorited = currentUser && currentUser.favorites && currentUser.favorites.includes(parseInt(bookId));
+        // Verificar se o livro está nos favoritos do usuário
+        const isFavorited = currentUser && currentUser.favorites && currentUser.favorites.includes(parseInt(validBookId));
 
-        // Lógica para botões de ação (apenas se usuário logado)
+        // Determinar o estado do livro e as ações disponíveis
         let actionButtonHtml = '';
         if (currentUser) {
             const isAvailable = book.available !== false;
-            const isUserInQueue = book.queue && book.queue.includes(currentUser.cpf);
             const isLoanedToUser = book.emprestadoPara === currentUser.cpf;
+            const isUserInQueue = book.queue && book.queue.includes(currentUser.cpf);
             
             console.log('Status do livro:', {
-                isAvailable,
-                isUserInQueue,
-                isLoanedToUser,
+                available: isAvailable,
+                loanedToUser: isLoanedToUser,
+                userInQueue: isUserInQueue,
                 emprestadoPara: book.emprestadoPara,
                 userCpf: currentUser.cpf
             });
             
             if (isLoanedToUser) {
-                actionButtonHtml = `<button id="devolverBtn" class="btn">Solicitar Devolução</button>`;
+                actionButtonHtml = `
+                    <div class="loan-actions">
+                        <button id="devolverBtn" class="btn">Solicitar Devolução</button>
+                        <button id="marcarLidoBtn" class="btn btn-success">Marcar como Lido</button>
+                        <button id="marcarNaoTerminadoBtn" class="btn btn-secondary">Não Terminei</button>
+                    </div>
+                `;
             } else if (isUserInQueue) {
                 const position = book.queue.indexOf(currentUser.cpf) + 1;
                 actionButtonHtml = `
@@ -117,10 +129,261 @@ export async function renderBookDetails(container, bookId) {
             actionButtonHtml = '<p style="color: var(--azul-claro);">Faça login para solicitar empréstimos</p>';
         }
 
-        // Usar placeholder offline
         const imageUrl = book.cover || createPlaceholderImage(book.title);
 
         container.innerHTML = `
+            <style>
+                .book-details {
+                    max-width: 800px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }
+                
+                .book-header {
+                    display: flex;
+                    gap: 20px;
+                    margin-bottom: 20px;
+                    background: var(--branco);
+                    padding: 20px;
+                    border-radius: 12px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                }
+                
+                .book-cover-large {
+                    width: 200px;
+                    height: 280px;
+                    object-fit: cover;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                    flex-shrink: 0;
+                }
+                
+                .book-info {
+                    flex: 1;
+                    min-width: 0;
+                }
+                
+                .book-info h2 {
+                    color: var(--azul-escuro);
+                    margin: 0 0 15px 0;
+                    font-size: 24px;
+                    word-wrap: break-word;
+                }
+                
+                .book-info p {
+                    color: var(--azul-claro);
+                    margin: 8px 0;
+                    font-size: 16px;
+                }
+                
+                .avg-rating {
+                    text-align: center;
+                    background: var(--cinza-claro);
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin-bottom: 20px;
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: var(--azul-escuro);
+                }
+                
+                .loan-reserve-section {
+                    background: var(--branco);
+                    padding: 20px;
+                    border-radius: 12px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                    text-align: center;
+                }
+                
+                .loan-actions {
+                    display: flex;
+                    gap: 10px;
+                    justify-content: center;
+                    flex-wrap: wrap;
+                    margin-top: 15px;
+                }
+                
+                .btn-success {
+                    background-color: #28a745;
+                    color: white;
+                    border: none;
+                    padding: 12px 20px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: background-color 0.3s;
+                }
+                
+                .btn-success:hover {
+                    background-color: #218838;
+                }
+                
+                .synopsis-section {
+                    background: var(--branco);
+                    padding: 20px;
+                    border-radius: 12px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                }
+                
+                .synopsis-section #synopsis {
+                    margin-top: 15px;
+                    line-height: 1.6;
+                    color: var(--azul-claro);
+                }
+                
+                .hidden {
+                    display: none;
+                }
+                
+                .review-section {
+                    background: var(--branco);
+                    padding: 20px;
+                    border-radius: 12px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                }
+                
+                .rating-input {
+                    display: flex;
+                    justify-content: center;
+                    gap: 5px;
+                    margin: 15px 0;
+                }
+                
+                .rating-input .star {
+                    font-size: 30px;
+                    color: #ddd;
+                    cursor: pointer;
+                    transition: color 0.2s;
+                }
+                
+                .rating-input .star.filled {
+                    color: #ffd700;
+                }
+                
+                .rating-input .star:hover {
+                    color: #ffed4e;
+                }
+                
+                .shelf-options {
+                    display: flex;
+                    gap: 10px;
+                    justify-content: center;
+                    margin-bottom: 20px;
+                }
+                
+                .favorited {
+                    background-color: #dc3545;
+                    color: white;
+                }
+                
+                #reviewsList {
+                    background: var(--branco);
+                    padding: 20px;
+                    border-radius: 12px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                }
+                
+                .review-card {
+                    border: 1px solid var(--cinza-claro);
+                    border-radius: 8px;
+                    padding: 15px;
+                    margin-bottom: 15px;
+                    background: var(--cinza-claro);
+                }
+                
+                .review-card:last-child {
+                    margin-bottom: 0;
+                }
+                
+                .stars-display {
+                    margin: 8px 0;
+                }
+                
+                .stars-display .star {
+                    font-size: 16px;
+                    color: #ddd;
+                }
+                
+                .stars-display .star.filled {
+                    color: #ffd700;
+                }
+                
+                .btn-small {
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    margin-right: 8px;
+                    margin-top: 8px;
+                }
+                
+                .btn-danger {
+                    background-color: #dc3545;
+                    color: white;
+                }
+                
+                .modal {
+                    display: none;
+                    position: fixed;
+                    z-index: 1000;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: rgba(0,0,0,0.5);
+                }
+                
+                .modal-content {
+                    background-color: white;
+                    margin: 15% auto;
+                    padding: 20px;
+                    border-radius: 12px;
+                    width: 80%;
+                    max-width: 500px;
+                    position: relative;
+                }
+                
+                .close-btn {
+                    position: absolute;
+                    top: 10px;
+                    right: 20px;
+                    font-size: 24px;
+                    cursor: pointer;
+                    color: #aaa;
+                }
+                
+                .close-btn:hover {
+                    color: #000;
+                }
+                
+                .shelf-item {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 10px;
+                    margin: 5px 0;
+                    background: var(--cinza-claro);
+                    border-radius: 5px;
+                }
+                
+                @media (max-width: 768px) {
+                    .book-header {
+                        flex-direction: column;
+                        align-items: center;
+                        text-align: center;
+                    }
+                    
+                    .loan-actions {
+                        flex-direction: column;
+                    }
+                }
+            </style>
+            
             <div class="book-details">
                 <div class="book-header">
                     <img src="${imageUrl}" 
@@ -132,6 +395,8 @@ export async function renderBookDetails(container, bookId) {
                         <p><strong>Autor:</strong> ${book.author || 'Autor desconhecido'}</p>
                         ${book.pages ? `<p><strong>Páginas:</strong> ${book.pages}</p>` : ''}
                         ${book.genre ? `<p><strong>Gênero:</strong> ${book.genre}</p>` : ''}
+                        ${book.editora ? `<p><strong>Editora:</strong> ${book.editora}</p>` : ''}
+                        ${book.ano_publicacao ? `<p><strong>Ano:</strong> ${book.ano_publicacao}</p>` : ''}
                     </div>
                 </div>
 
@@ -153,17 +418,17 @@ export async function renderBookDetails(container, bookId) {
 
                 <div class="synopsis-section">
                     <button id="toggleSynopsisBtn" class="btn">VER SINOPSE</button>
-                    <p id="synopsis" class="hidden">${book.synopsis || 'Sem sinopse disponível.'}</p>
+                    <div id="synopsis" class="hidden">${book.synopsis || 'Sem sinopse disponível.'}</div>
                 </div>
 
                 ${currentUser ? `
                     <div class="review-section">
                         <h3>Adicionar nova resenha:</h3>
                         <div class="rating-input">
-                            ${[1, 2, 3, 4, 5].map(i => `<span class="star" data-value="${i}">&#9733;</span>`).join('')}
+                            ${[1, 2, 3, 4, 5].map(i => `<span class="star" data-value="${i}">★</span>`).join('')}
                         </div>
-                        <textarea id="reviewText" rows="4" maxlength="500" placeholder="Escreva sua resenha..."></textarea>
-                        <button id="saveReviewBtn" class="btn">Adicionar Resenha</button>
+                        <textarea id="reviewText" rows="4" maxlength="500" placeholder="Escreva sua resenha..." style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; resize: vertical; box-sizing: border-box;"></textarea>
+                        <button id="saveReviewBtn" class="btn" style="margin-top: 10px;">Adicionar Resenha</button>
                     </div>
 
                     <div class="shelf-options">
@@ -181,7 +446,7 @@ export async function renderBookDetails(container, bookId) {
                             <strong>${currentUser && r.cpf === currentUser.cpf ? "Você" : (r.user || 'Usuário')}</strong> 
                             <em>(${r.date || 'Data não disponível'})</em>
                             <div class="stars-display">
-                                ${[1, 2, 3, 4, 5].map(i => `<span class="star ${i <= (r.rating || 0) ? 'filled' : ''}">&#9733;</span>`).join('')}
+                                ${[1, 2, 3, 4, 5].map(i => `<span class="star ${i <= (r.rating || 0) ? 'filled' : ''}">★</span>`).join('')}
                             </div>
                             <p>${(r.text || 'Sem texto').replace(/\n/g, '<br>')}</p>
                             ${currentUser && r.cpf === currentUser.cpf ? `
@@ -207,400 +472,305 @@ export async function renderBookDetails(container, bookId) {
             </div>
         `;
 
-        // ==============================
-        // Event Listeners
-        // ==============================
-
-        // Sinopse toggle
-        const toggleSynopsisBtn = document.getElementById('toggleSynopsisBtn');
-        if (toggleSynopsisBtn) {
-            toggleSynopsisBtn.onclick = () => {
-                const synopsis = document.getElementById('synopsis');
-                if (synopsis) {
-                    synopsis.classList.toggle('hidden');
-                    toggleSynopsisBtn.textContent = synopsis.classList.contains('hidden') ? 'VER SINOPSE' : 'VER MENOS';
-                }
-            };
-        }
-
-        // Botão voltar
-        const backBtn = document.getElementById('backBtn');
-        if (backBtn) {
-            backBtn.onclick = () => {
-                console.log('Voltando para lista de livros');
-                navigateTo('books');
-            };
-        }
-
-        // Se não há usuário logado, não adicionar mais funcionalidades
-        if (!currentUser) {
-            console.log('Usuário não logado, funcionalidades limitadas');
-            return;
-        }
-
-        // ==============================
-        // Funcionalidades para usuários logados
-        // ==============================
-
-        // Sistema de avaliação por estrelas
-        let selectedRating = 0;
-        let editingReviewId = null;
-        const ratingStars = document.querySelectorAll('.rating-input .star');
-        
-        function updateStars() {
-            ratingStars.forEach((s, index) => {
-                s.classList.toggle('filled', index < selectedRating);
-            });
-        }
-
-        ratingStars.forEach(star => {
-            star.addEventListener('click', () => {
-                selectedRating = parseInt(star.dataset.value);
-                updateStars();
-            });
-        });
-
-        // Salvar resenha
-        const saveBtn = document.getElementById('saveReviewBtn');
-        if (saveBtn) {
-            saveBtn.onclick = async () => {
-                console.log('=== DEBUG SALVAR RESENHA ===');
-                
-                const text = document.getElementById('reviewText').value.trim();
-                console.log('Texto da resenha:', text);
-                console.log('Rating selecionado:', selectedRating);
-                
-                if (selectedRating === 0 && !editingReviewId) {
-                    alert('Por favor, selecione uma classificação em estrelas.');
-                    return;
-                }
-                
-                let url = 'http://localhost:3000/api/reviews';
-                let method = 'POST';
-                let body = { 
-                    bookId: parseInt(bookId), 
-                    text: text, 
-                    rating: selectedRating
-                };
-
-                if (editingReviewId) {
-                    url = `${url}/${editingReviewId}`;
-                    method = 'PUT';
-                }
-
-                console.log('URL:', url);
-                console.log('Method:', method);
-                console.log('Body:', body);
-
-                try {
-                    const response = await fetch(url, {
-                        method: method,
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify(body)
-                    });
-
-                    console.log('Status da resposta:', response.status);
-
-                    if (response.ok) {
-                        const responseData = await response.json();
-                        console.log('Resposta do servidor:', responseData);
-                        
-                        alert(responseData.message || 'Resenha salva com sucesso!');
-                        
-                        // Recarregar a página de detalhes
-                        renderBookDetails(container, bookId);
-                    } else {
-                        const errorData = await response.json();
-                        console.error('Erro HTTP:', response.status, errorData);
-                        
-                        let userMessage = errorData.error || errorData.message || 'Erro desconhecido';
-                        if (response.status === 401) {
-                            userMessage = 'Você precisa estar logado para salvar resenhas';
-                        } else if (response.status === 400 && errorData.error?.includes('já avaliou')) {
-                            userMessage = 'Você já avaliou este livro';
-                        } else if (response.status === 500) {
-                            userMessage = 'Erro interno do servidor. Tente novamente.';
-                        }
-                        
-                        alert(`Erro ao salvar resenha: ${userMessage}`);
-                    }
-                } catch (error) {
-                    console.error('Erro de conexão:', error);
-                    alert('Erro de conexão ao salvar resenha. Verifique se o servidor está rodando.');
-                }
-                
-                console.log('=== FIM DEBUG SALVAR RESENHA ===');
-            };
-        }
-
-        // Botão de solicitar empréstimo
-        const solicitarBtn = document.getElementById('solicitarBtn');
-        if (solicitarBtn) {
-            solicitarBtn.onclick = async () => {
-                console.log('=== DEBUG SOLICITAÇÃO EMPRÉSTIMO ===');
-                console.log('BookId:', bookId, typeof bookId);
-                console.log('Usuário:', currentUser?.nome);
-                
-                try {
-                    const response = await fetch('http://localhost:3000/api/loan/request', {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify({ bookId: parseInt(bookId) })
-                    });
-                    
-                    console.log('Status da resposta:', response.status);
-                    
-                    if (response.ok) {
-                        const responseData = await response.json();
-                        alert(responseData.message || 'Empréstimo solicitado com sucesso!');
-                        renderBookDetails(container, bookId);
-                    } else {
-                        const errorData = await response.json();
-                        console.error('Erro HTTP:', response.status, errorData);
-                        
-                        let errorMsg = errorData.error || errorData.message || 'Erro desconhecido';
-                        if (response.status === 401) errorMsg = 'Você precisa estar logado';
-                        if (response.status === 400) errorMsg = errorData.error || 'Livro já está emprestado ou dados inválidos';
-                        if (response.status === 404) errorMsg = 'Livro não encontrado';
-                        if (response.status === 500) errorMsg = 'Erro interno do servidor';
-                        
-                        alert(`Erro: ${errorMsg}`);
-                    }
-                } catch (error) {
-                    console.error('Erro na requisição:', error);
-                    alert('Erro de conexão. Verifique se o servidor está rodando.');
-                }
-            };
-        }
-
-        // Botão de reservar (entrar na fila)
-        const reservarBtn = document.getElementById('reservarBtn');
-        if (reservarBtn) {
-            reservarBtn.onclick = async () => {
-                try {
-                    const response = await fetch('http://localhost:3000/api/loan/reserve', {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json'
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify({ bookId: parseInt(bookId) })
-                    });
-                    
-                    if (response.ok) {
-                        const responseData = await response.json();
-                        alert(responseData.message || 'Você entrou na fila de espera!');
-                        renderBookDetails(container, bookId);
-                    } else {
-                        const errorData = await response.json();
-                        alert(`Erro: ${errorData.error || 'Erro desconhecido'}`);
-                    }
-                } catch (error) {
-                    console.error('Erro na requisição:', error);
-                    alert('Erro de conexão.');
-                }
-            };
-        }
-
-        // Botão de devolver
-        const devolverBtn = document.getElementById('devolverBtn');
-        if (devolverBtn) {
-            devolverBtn.onclick = async () => {
-                if (!confirm('Deseja realmente solicitar a devolução deste livro?')) return;
-                
-                try {
-                    const response = await fetch('http://localhost:3000/api/loan/request-return', {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json'
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify({ bookId: parseInt(bookId) })
-                    });
-                    
-                    if (response.ok) {
-                        const responseData = await response.json();
-                        alert(responseData.message || 'Solicitação de devolução enviada!');
-                        renderBookDetails(container, bookId);
-                    } else {
-                        const errorData = await response.json();
-                        alert(`Erro: ${errorData.error || 'Erro desconhecido'}`);
-                    }
-                } catch (error) {
-                    console.error('Erro na requisição:', error);
-                    alert('Erro de conexão.');
-                }
-            };
-        }
-
-        // Favoritar
-        const favoriteBtn = document.getElementById('favoriteBtn');
-        if (favoriteBtn) {
-            favoriteBtn.onclick = async () => {
-                const isFavorited = favoriteBtn.classList.contains('favorited');
-                const method = isFavorited ? 'DELETE' : 'POST';
-                const url = isFavorited ? 
-                    `http://localhost:3000/api/favorites/${bookId}` : 
-                    'http://localhost:3000/api/favorites';
-
-                try {
-                    const response = await fetch(url, {
-                        method: method,
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: method === 'POST' ? JSON.stringify({ bookId: parseInt(bookId) }) : null
-                    });
-                    
-                    if (response.ok) {
-                        const responseData = await response.json();
-                        alert(responseData.message || (isFavorited ? 'Removido dos favoritos' : 'Adicionado aos favoritos'));
-                        renderBookDetails(container, bookId);
-                    } else {
-                        const errorData = await response.json();
-                        alert(`Erro: ${errorData.error || 'Erro desconhecido'}`);
-                    }
-                } catch (error) {
-                    alert('Erro ao favoritar/desfavoritar o livro.');
-                    console.error(error);
-                }
-            };
-        }
-
-        // Modal de prateleiras
-        const modal = document.getElementById('shelfModal');
-        const addShelfBtn = document.getElementById('addShelfBtn');
-        const closeBtn = document.querySelector('.close-btn');
-        const shelfList = document.getElementById('shelfList');
-
-        if (addShelfBtn && modal) {
-            addShelfBtn.onclick = () => {
-                if (shelfList) {
-                    shelfList.innerHTML = '';
-                    userShelves.forEach(shelf => {
-                        const shelfItem = document.createElement('div');
-                        shelfItem.className = 'shelf-item';
-                        shelfItem.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: var(--cinza-claro); border-radius: 5px;';
-                        shelfItem.innerHTML = `
-                            <span>${shelf.name || shelf.nome_prateleira}</span>
-                            <button class="add-to-shelf-btn btn-small" data-shelf-id="${shelf.id}">Adicionar</button>
-                        `;
-                        shelfList.appendChild(shelfItem);
-                    });
-                    
-                    if (userShelves.length === 0) {
-                        shelfList.innerHTML = '<p>Você não tem prateleiras personalizadas. Crie uma!</p>';
-                    }
-                    
-                    // Event listeners para os botões de adicionar à prateleira
-                    shelfList.querySelectorAll('.add-to-shelf-btn').forEach(btn => {
-                        btn.onclick = async () => {
-                            const shelfId = btn.dataset.shelfId;
-                            try {
-                                const response = await fetch('http://localhost:3000/api/user/shelves/add-book', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    credentials: 'include',
-                                    body: JSON.stringify({ 
-                                        shelfId: parseInt(shelfId), 
-                                        bookId: parseInt(bookId) 
-                                    })
-                                });
-                                
-                                if (response.ok) {
-                                    const responseData = await response.json();
-                                    alert(responseData.message || 'Livro adicionado à prateleira!');
-                                    modal.style.display = 'none';
-                                } else {
-                                    const errorData = await response.json();
-                                    alert(`Erro: ${errorData.error || 'Erro desconhecido'}`);
-                                }
-                            } catch (error) {
-                                alert('Erro ao adicionar livro à prateleira.');
-                                console.error(error);
-                            }
-                        };
-                    });
-                }
-                modal.style.display = 'block';
-            };
-        }
-
-        if (closeBtn) {
-            closeBtn.onclick = () => { 
-                if (modal) modal.style.display = 'none'; 
-            };
-        }
-
-        // Fechar modal clicando fora
-        window.addEventListener('click', (event) => {
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
-        });
-
-        // Funcionalidade dos botões de editar/excluir resenhas
-        function attachReviewEvents() {
-            document.querySelectorAll('.editReviewBtn').forEach(btn => {
-                btn.onclick = (e) => {
-                    const card = e.target.closest('.review-card');
-                    const reviewId = card.dataset.reviewid;
-                    const review = allReviews.find(r => r.id == reviewId);
-                    if (review) {
-                        document.getElementById('reviewText').value = review.text || '';
-                        selectedRating = review.rating || 0;
-                        updateStars();
-                        editingReviewId = reviewId;
-                        saveBtn.textContent = 'Atualizar Resenha';
-                        // Scroll para o formulário
-                        document.querySelector('.rating-input').scrollIntoView({ behavior: 'smooth' });
-                    }
-                };
-            });
-
-            document.querySelectorAll('.deleteReviewBtn').forEach(btn => {
-                btn.onclick = async (e) => {
-                    if (!confirm('Deseja realmente excluir esta resenha?')) return;
-                    
-                    const card = e.target.closest('.review-card');
-                    const reviewId = card.dataset.reviewid;
-
-                    try {
-                        const response = await fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
-                            method: 'DELETE',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include'
-                        });
-
-                        if (response.ok) {
-                            const responseData = await response.json();
-                            alert(responseData.message || 'Resenha excluída com sucesso!');
-                            renderBookDetails(container, bookId);
-                        } else {
-                            const errorData = await response.json();
-                            alert(`Erro ao excluir resenha: ${errorData.error || 'Erro desconhecido'}`);
-                        }
-                    } catch (error) {
-                        alert('Erro de conexão ao excluir resenha.');
-                        console.error(error);
-                    }
-                };
-            });
-        }
-
-        attachReviewEvents();
-
-        console.log('BookDetails renderizado com sucesso');
+        setupBookDetailsEventListeners(container, validBookId, currentUser, userShelves, allReviews);
 
     } catch (error) {
         console.error('Erro ao carregar detalhes do livro:', error);
-        container.innerHTML = '<div class="no-books">Erro ao carregar os detalhes do livro. Tente novamente.</div>';
+        container.innerHTML = `
+            <div class="no-books">
+                <h3>Erro ao carregar os detalhes do livro</h3>
+                <p>Tente novamente mais tarde.</p>
+                <button onclick="window.location.reload()" class="btn">Recarregar</button>
+            </div>
+        `;
     }
+}
+
+function setupBookDetailsEventListeners(container, bookId, currentUser, userShelves, allReviews) {
+    // Toggle da sinopse
+    const toggleSynopsisBtn = container.querySelector('#toggleSynopsisBtn');
+    const synopsis = container.querySelector('#synopsis');
+    
+    if (toggleSynopsisBtn && synopsis) {
+        toggleSynopsisBtn.addEventListener('click', () => {
+            if (synopsis.classList.contains('hidden')) {
+                synopsis.classList.remove('hidden');
+                toggleSynopsisBtn.textContent = 'VER MENOS';
+            } else {
+                synopsis.classList.add('hidden');
+                toggleSynopsisBtn.textContent = 'VER SINOPSE';
+            }
+        });
+    }
+
+    // Botão voltar
+    const backBtn = container.querySelector('#backBtn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => navigateTo('books'));
+    }
+
+    if (!currentUser) return;
+
+    // Sistema de avaliação por estrelas
+    let selectedRating = 0;
+    const ratingStars = container.querySelectorAll('.rating-input .star');
+    
+    function updateStars() {
+        ratingStars.forEach((star, index) => {
+            if (index < selectedRating) {
+                star.classList.add('filled');
+            } else {
+                star.classList.remove('filled');
+            }
+        });
+    }
+
+    ratingStars.forEach((star, index) => {
+        star.addEventListener('click', () => {
+            selectedRating = parseInt(star.dataset.value);
+            updateStars();
+        });
+        
+        star.addEventListener('mouseenter', () => {
+            const hoverValue = parseInt(star.dataset.value);
+            ratingStars.forEach((s, i) => {
+                if (i < hoverValue) {
+                    s.style.color = '#ffed4e';
+                } else {
+                    s.style.color = s.classList.contains('filled') ? '#ffd700' : '#ddd';
+                }
+            });
+        });
+    });
+
+    container.addEventListener('mouseleave', () => {
+        updateStars();
+    });
+
+    // Botões de empréstimo/reserva/devolução
+    const solicitarBtn = container.querySelector('#solicitarBtn');
+    const reservarBtn = container.querySelector('#reservarBtn');
+    const devolverBtn = container.querySelector('#devolverBtn');
+    const cancelarReservaBtn = container.querySelector('#cancelarReservaBtn');
+
+    if (solicitarBtn) {
+        solicitarBtn.addEventListener('click', async () => {
+            if (!confirm('Deseja realmente solicitar o empréstimo deste livro?')) return;
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/loan/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ bookId: parseInt(bookId) })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'Empréstimo solicitado com sucesso!');
+                    renderBookDetails(container, bookId);
+                } else {
+                    const error = await response.json();
+                    alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                }
+            } catch (error) {
+                console.error('Erro na requisição:', error);
+                alert('Erro de conexão.');
+            }
+        });
+    }
+
+    if (reservarBtn) {
+        reservarBtn.addEventListener('click', async () => {
+            if (!confirm('Deseja entrar na fila de espera para este livro?')) return;
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/loan/reserve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ bookId: parseInt(bookId) })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'Você entrou na fila de espera!');
+                    renderBookDetails(container, bookId);
+                } else {
+                    const error = await response.json();
+                    alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                }
+            } catch (error) {
+                console.error('Erro na requisição:', error);
+                alert('Erro de conexão.');
+            }
+        });
+    }
+
+    if (devolverBtn) {
+        devolverBtn.addEventListener('click', async () => {
+            if (!confirm('Deseja realmente solicitar a devolução deste livro?')) return;
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/loan/request-return', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ bookId: parseInt(bookId) })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'Solicitação de devolução enviada!');
+                    renderBookDetails(container, bookId);
+                } else {
+                    const error = await response.json();
+                    alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                }
+            } catch (error) {
+                console.error('Erro na requisição:', error);
+                alert('Erro de conexão.');
+            }
+        });
+    }
+
+    // Salvar resenha
+    const saveBtn = container.querySelector('#saveReviewBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            const text = container.querySelector('#reviewText').value.trim();
+            
+            if (selectedRating === 0) {
+                alert('Por favor, selecione uma classificação em estrelas.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/reviews', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ 
+                        bookId: parseInt(bookId), 
+                        text: text, 
+                        rating: selectedRating
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'Resenha salva com sucesso!');
+                    renderBookDetails(container, bookId);
+                } else {
+                    const error = await response.json();
+                    alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                }
+            } catch (error) {
+                console.error('Erro de conexão:', error);
+                alert('Erro de conexão ao salvar resenha.');
+            }
+        });
+    }
+
+    // Favoritar
+    const favoriteBtn = container.querySelector('#favoriteBtn');
+    if (favoriteBtn) {
+        favoriteBtn.addEventListener('click', async () => {
+            const isFavorited = favoriteBtn.classList.contains('favorited');
+            const method = isFavorited ? 'DELETE' : 'POST';
+            const url = isFavorited ? 
+                `http://localhost:3000/api/favorites/${bookId}` : 
+                'http://localhost:3000/api/favorites';
+
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: method === 'POST' ? JSON.stringify({ bookId: parseInt(bookId) }) : null
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || (isFavorited ? 'Removido dos favoritos' : 'Adicionado aos favoritos'));
+                    renderBookDetails(container, bookId);
+                } else {
+                    const error = await response.json();
+                    alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                }
+            } catch (error) {
+                alert('Erro ao favoritar/desfavoritar o livro.');
+                console.error(error);
+            }
+        });
+    }
+
+    // Modal de prateleiras
+    const modal = container.querySelector('#shelfModal');
+    const addShelfBtn = container.querySelector('#addShelfBtn');
+    const closeBtn = container.querySelector('.close-btn');
+    const shelfList = container.querySelector('#shelfList');
+
+    if (addShelfBtn && modal) {
+        addShelfBtn.addEventListener('click', () => {
+            if (shelfList) {
+                shelfList.innerHTML = '';
+                userShelves.forEach(shelf => {
+                    const shelfItem = document.createElement('div');
+                    shelfItem.className = 'shelf-item';
+                    shelfItem.innerHTML = `
+                        <span>${shelf.name || shelf.nome_prateleira}</span>
+                        <button class="add-to-shelf-btn btn-small" data-shelf-id="${shelf.id}">Adicionar</button>
+                    `;
+                    shelfList.appendChild(shelfItem);
+                });
+                
+                if (userShelves.length === 0) {
+                    shelfList.innerHTML = '<p>Você não tem prateleiras personalizadas. Crie uma!</p>';
+                }
+                
+                shelfList.querySelectorAll('.add-to-shelf-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const shelfId = btn.dataset.shelfId;
+                        try {
+                            const response = await fetch('http://localhost:3000/api/user/shelves/add-book', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify({ 
+                                    shelfId: parseInt(shelfId), 
+                                    bookId: parseInt(bookId) 
+                                })
+                            });
+                            
+                            if (response.ok) {
+                                const result = await response.json();
+                                alert(result.message || 'Livro adicionado à prateleira!');
+                                modal.style.display = 'none';
+                            } else {
+                                const error = await response.json();
+                                alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                            }
+                        } catch (error) {
+                            alert('Erro ao adicionar livro à prateleira.');
+                            console.error(error);
+                        }
+                    });
+                });
+            }
+            modal.style.display = 'block';
+        });
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => { 
+            if (modal) modal.style.display = 'none'; 
+        });
+    }
+
+    window.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
 }

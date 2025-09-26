@@ -16,6 +16,17 @@ app.use(cors({
     credentials: true
 }));
 
+// Configuração de sessão
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'seu-secret-super-seguro',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: false, // true apenas em HTTPS
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 horas
+    }
+}));
 
 // Configuração do banco de dados usando variáveis de ambiente
 const dbConfig = {
@@ -29,20 +40,59 @@ const dbConfig = {
 let pool;
 async function createPool() {
     try {
+        console.log('=== CRIANDO POOL DE CONEXÕES ===');
+        console.log('Configuração do banco:', {
+            host: dbConfig.host,
+            user: dbConfig.user,
+            database: dbConfig.database,
+            hasPassword: !!dbConfig.password
+        });
+        
         pool = mysql.createPool({
             ...dbConfig,
             waitForConnections: true,
-            connectionLimit: 10,
-            queueLimit
+            connectionLimit: 10, 
+            queueLimit: 0,
+            acquireTimeout: 60000,
+            timeout: 60000,
+            reconnect: true,
         });
-        console.log('Pool de conexões MySQL criado.');
+        
+        console.log('Pool criado, testando conexão...');
         
         // Testar conexão
         const connection = await pool.getConnection();
-        console.log('Conexão com banco de dados estabelecida com sucesso');
+        console.log('Conexão de teste obtida com sucesso');
+        
+        // Testar query
+        const [result] = await connection.execute('SELECT VERSION() as version');
+        console.log('Versão do MySQL:', result[0].version);
+        
+        // Verificar se o database existe
+        const [dbCheck] = await connection.execute('SELECT DATABASE() as db');
+        console.log('Database atual:', dbCheck[0].db);
+        
         connection.release();
+        console.log('Pool de conexões MySQL criado e testado com sucesso!');
+        
     } catch (error) {
-        console.error('Erro ao criar o pool de conexões:', error.message);
+        console.error('=== ERRO CRÍTICO AO CRIAR POOL ===');
+        console.error('Mensagem:', error.message);
+        console.error('Código:', error.code);
+        console.error('Stack:', error.stack);
+        
+        // Dicas de solução baseadas no erro
+        if (error.code === 'ECONNREFUSED') {
+            console.error('\n🔥 DICA: MySQL não está rodando ou não está na porta correta');
+            console.error('Verifique se o MySQL está iniciado e rodando na porta 3306');
+        } else if (error.code === 'ER_ACCESS_DENIED_ERROR') {
+            console.error('\n🔥 DICA: Problema de autenticação');
+            console.error('Verifique usuário e senha do banco');
+        } else if (error.code === 'ER_BAD_DB_ERROR') {
+            console.error('\n🔥 DICA: Database não existe');
+            console.error('Execute o script SQL para criar o database librain');
+        }
+        
         process.exit(1);
     }
 }
@@ -136,7 +186,21 @@ app.post('/api/login', async (req, res) => {
             }
 
             const user = rows[0];
-            const isMatch = await bcrypt.compare(senha, user.senha_hash);
+            let isMatch = false;
+            
+            // Verificar se é o hash da senha ou senha em texto plano (para admin padrão)
+            if (user.senha_hash === 'admin123' && senha === 'admin123') {
+                isMatch = true;
+                // Opcionalmente, criptografar a senha para o futuro
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash('admin123', salt);
+                await connection.execute(
+                    'UPDATE usuarios SET senha_hash = ? WHERE cpf = ?',
+                    [hashedPassword, cpfLimpo]
+                );
+            } else {
+                isMatch = await bcrypt.compare(senha, user.senha_hash);
+            }
 
             if (isMatch) {
                 req.session.user = { 
@@ -303,6 +367,133 @@ app.get('/api/profile', isAuthenticated, async (req, res) => {
     }
 });
 
+app.put('/api/profile/avatar', isAuthenticated, async (req, res) => {
+    console.log('=== DEBUG: Upload de avatar ===');
+    console.log('Body recebido:', { hasAvatarUrl: !!req.body.avatarUrl });
+    console.log('Tamanho do avatar:', req.body.avatarUrl ? req.body.avatarUrl.length : 0);
+    console.log('User CPF da sessão:', req.session.user.cpf);
+    
+    const { avatarUrl } = req.body;
+    const userCpf = req.session.user.cpf;
+    
+    if (!avatarUrl) {
+        console.log('Avatar URL não fornecida');
+        return res.status(400).json({ error: 'URL do avatar é obrigatória' });
+    }
+    
+    // Validação básica de data URL
+    if (!avatarUrl.startsWith('data:image/')) {
+        console.log('Formato de avatar inválido');
+        return res.status(400).json({ error: 'Formato de imagem inválido' });
+    }
+    
+    let connection;
+    try {
+        console.log('Conectando ao banco para atualizar avatar...');
+        connection = await pool.getConnection();
+        
+        // Primeiro, verificar se o usuário existe
+        const [userCheck] = await connection.execute(
+            'SELECT id FROM usuarios WHERE cpf = ?',
+            [userCpf]
+        );
+        
+        if (userCheck.length === 0) {
+            console.log('Usuário não encontrado:', userCpf);
+            return res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+        
+        console.log('Usuário encontrado, atualizando avatar...');
+        
+        // Atualizar avatar no banco
+        const [result] = await connection.execute(
+            'UPDATE usuarios SET avatar_url = ? WHERE cpf = ?',
+            [avatarUrl, userCpf]
+        );
+        
+        console.log('Resultado da atualização:', result.affectedRows);
+        
+        if (result.affectedRows > 0) {
+            // Atualizar dados da sessão
+            if (req.session.user) {
+                req.session.user.avatar_url = avatarUrl;
+            }
+            
+            console.log('Avatar atualizado com sucesso');
+            res.status(200).json({ 
+                message: 'Avatar atualizado com sucesso!',
+                avatar_url: avatarUrl
+            });
+        } else {
+            console.log('Nenhuma linha foi afetada na atualização');
+            res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+        
+    } catch (error) {
+        console.error('=== ERRO NO UPLOAD DE AVATAR ===');
+        console.error('Mensagem:', error.message);
+        console.error('Stack:', error.stack);
+        console.error('SQL State:', error.sqlState);
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: error.message 
+        });
+    } finally {
+        if (connection) {
+            console.log('Liberando conexão do avatar...');
+            connection.release();
+        }
+    }
+});
+
+app.put('/api/profile/bio', isAuthenticated, async (req, res) => {
+    const { bio } = req.body;
+    const userCpf = req.session.user.cpf;
+    
+    // Validação do tamanho da biografia
+    if (bio && bio.length > 500) {
+        return res.status(400).json({ error: 'Biografia deve ter no máximo 500 caracteres' });
+    }
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        // Atualizar biografia no banco
+        const [result] = await connection.execute(
+            'UPDATE usuarios SET bio = ?, data_atualizacao = NOW() WHERE cpf = ?',
+            [bio || null, userCpf]
+        );
+        
+        if (result.affectedRows > 0) {
+            // Buscar dados atualizados do usuário
+            const [userRows] = await connection.execute(
+                'SELECT nome, bio FROM usuarios WHERE cpf = ?',
+                [userCpf]
+            );
+            
+            if (userRows.length > 0) {
+                const updatedUser = userRows[0];
+                res.status(200).json({
+                    message: 'Biografia atualizada com sucesso!',
+                    nome: updatedUser.nome,
+                    bio: updatedUser.bio
+                });
+            } else {
+                res.status(404).json({ error: 'Usuário não encontrado' });
+            }
+        } else {
+            res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+        
+    } catch (error) {
+        console.error('Erro ao atualizar biografia:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 app.post('/api/logout', (req, res) => {
     req.session.destroy(err => {
         if (err) {
@@ -322,79 +513,110 @@ app.post('/api/logout', (req, res) => {
 // ================================
 
 app.get('/api/books', async (req, res) => {
+    console.log('=== DEBUG: Requisição para /api/books recebida ===');
+    console.log('Headers:', req.headers);
+    console.log('Session:', req.session);
+    
     let connection;
     try {
+        console.log('Tentando obter conexão do pool...');
         connection = await pool.getConnection();
+        console.log('Conexão obtida com sucesso');
         
-        // Query complexa para obter informações completas dos livros
+        console.log('Executando query para buscar livros...');
+        
+        // Query para buscar livros com informações de empréstimos e reviews
         const [rows] = await connection.execute(`
             SELECT 
                 l.*,
-                CASE WHEN e.id IS NULL THEN true ELSE false END as available,
+                CASE 
+                    WHEN e.id IS NOT NULL AND e.status = 'ativo' THEN 'false'
+                    ELSE 'true' 
+                END as available,
                 e.cpf as emprestadoPara,
-                DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as returnDate,
-                COUNT(DISTINCT r.id) as reviewCount,
+                e.data_prevista_devolucao as returnDate,
+                COUNT(r.id) as reviewCount,
                 AVG(r.rating) as avgRating
-            FROM livros l 
+            FROM livros l
             LEFT JOIN emprestimos e ON l.id = e.bookId AND e.status = 'ativo'
             LEFT JOIN resenhas r ON l.id = r.bookId
-            GROUP BY l.id
+            GROUP BY l.id, e.id, e.cpf, e.data_prevista_devolucao
             ORDER BY l.title
         `);
         
-        res.json(rows);
+        console.log('Query executada, livros encontrados:', rows.length);
+        console.log('Primeiros 3 livros:', rows.slice(0, 3));
+        
+        // Processar os dados para o formato esperado pelo frontend
+        const processedBooks = rows.map(book => ({
+            ...book,
+            available: book.available === 'true',
+            reviewCount: parseInt(book.reviewCount) || 0,
+            avgRating: book.avgRating ? parseFloat(book.avgRating) : null
+        }));
+        
+        res.json(processedBooks);
     } catch (error) {
-        console.error('Erro ao buscar livros:', error);
+        console.error('=== ERRO DETALHADO NA ROTA /api/books ===');
+        console.error('Mensagem do erro:', error.message);
+        console.error('Stack do erro:', error.stack);
+        console.error('Código do erro:', error.code);
+        console.error('SQL State:', error.sqlState);
         res.status(500).json({ 
-            error: 'Erro interno do servidor' 
+            error: 'Erro interno do servidor',
+            details: error.message 
         });
     } finally {
-        if (connection) connection.release();
+        if (connection) {
+            console.log('Liberando conexão...');
+            connection.release();
+        }
     }
 });
 
+// Nova rota para buscar detalhes específicos de um livro
 app.get('/api/books/:id', async (req, res) => {
     const { id } = req.params;
-    
-    if (!id) {
-        return res.status(400).json({ 
-            error: 'ID do livro é obrigatório' 
-        });
-    }
     
     let connection;
     try {
         connection = await pool.getConnection();
         
-        // Buscar livro com informações de empréstimo e fila
+        // Buscar livro com informações de empréstimo
         const [bookRows] = await connection.execute(`
-            SELECT l.*, 
-                   CASE WHEN e.id IS NULL THEN true ELSE false END as available,
-                   e.cpf as emprestadoPara,
-                   DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as returnDate,
-                   GROUP_CONCAT(DISTINCT r.cpf ORDER BY r.posicao) as queue
-            FROM livros l 
+            SELECT 
+                l.*,
+                CASE 
+                    WHEN e.id IS NOT NULL AND e.status = 'ativo' THEN false
+                    ELSE true 
+                END as available,
+                e.cpf as emprestadoPara,
+                DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as returnDate
+            FROM livros l
             LEFT JOIN emprestimos e ON l.id = e.bookId AND e.status = 'ativo'
-            LEFT JOIN reservas r ON l.id = r.bookId AND r.status = 'aguardando'
             WHERE l.id = ?
-            GROUP BY l.id
         `, [id]);
         
-        if (bookRows.length > 0) {
-            const book = bookRows[0];
-            // Converter queue string em array
-            book.queue = book.queue ? book.queue.split(',') : [];
-            res.json(book);
-        } else {
-            res.status(404).json({ 
-                error: 'Livro não encontrado' 
-            });
+        if (bookRows.length === 0) {
+            return res.status(404).json({ error: 'Livro não encontrado' });
         }
+        
+        const book = bookRows[0];
+        
+        // Buscar fila de espera do livro
+        const [queueRows] = await connection.execute(`
+            SELECT cpf FROM reservas 
+            WHERE bookId = ? AND status = 'aguardando' 
+            ORDER BY posicao ASC
+        `, [id]);
+        
+        book.queue = queueRows.map(row => row.cpf);
+        
+        res.json(book);
+        
     } catch (error) {
-        console.error('Erro ao buscar livro:', error);
-        res.status(500).json({ 
-            error: 'Erro interno do servidor' 
-        });
+        console.error('Erro ao buscar detalhes do livro:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
@@ -755,6 +977,40 @@ app.post('/api/user/shelves', isAuthenticated, async (req, res) => {
     }
 });
 
+app.delete('/api/user/shelves/:shelfId', isAuthenticated, async (req, res) => {
+    const { shelfId } = req.params;
+    const userCpf = req.session.user.cpf;
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        // Verificar se a prateleira pertence ao usuário
+        const [shelfCheck] = await connection.execute(
+            'SELECT id FROM prateleiras WHERE id = ? AND cpf = ?',
+            [shelfId, userCpf]
+        );
+        
+        if (shelfCheck.length === 0) {
+            return res.status(403).json({ error: 'Prateleira não encontrada ou não pertence a você' });
+        }
+        
+        // Deletar prateleira (os livros da prateleira serão removidos automaticamente devido ao CASCADE)
+        await connection.execute(
+            'DELETE FROM prateleiras WHERE id = ? AND cpf = ?', 
+            [shelfId, userCpf]
+        );
+        
+        res.status(200).json({ message: 'Prateleira excluída com sucesso!' });
+        
+    } catch (error) {
+        console.error('Erro ao excluir prateleira:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 app.post('/api/user/shelves/add-book', isAuthenticated, async (req, res) => {
     const { shelfId, bookId } = req.body;
     
@@ -796,696 +1052,218 @@ app.post('/api/user/shelves/add-book', isAuthenticated, async (req, res) => {
 });
 
 // ================================
-// ROTAS ADMIN
+// ROTA DE DASHBOARD DO USUÁRIO
 // ================================
 
-app.get('/api/admin/devolucoes', isAuthenticated, isAdmin, async (req, res) => {
+app.get('/api/user/dashboard', isAuthenticated, async (req, res) => {
+    const userCpf = req.session.user.cpf;
+    
     let connection;
     try {
         connection = await pool.getConnection();
         
-        const [pendingReturns] = await connection.execute(`
-            SELECT e.*, l.title, u.nome as user_name
+        // Buscar empréstimos ativos
+        const [emprestados] = await connection.execute(`
+            SELECT e.*, l.title, l.author, 
+                   DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as data_devolucao_formatada
             FROM emprestimos e
             JOIN livros l ON e.bookId = l.id
-            JOIN usuarios u ON e.cpf = u.cpf
-            WHERE e.status = 'pendente_devolucao'
+            WHERE e.cpf = ? AND e.status = 'ativo'
+            ORDER BY e.data_prevista_devolucao ASC
+        `, [userCpf]);
+        
+        // Buscar reservas
+        const [reservas] = await connection.execute(`
+            SELECT r.*, l.title, l.author
+            FROM reservas r
+            JOIN livros l ON r.bookId = l.id
+            WHERE r.cpf = ? AND r.status = 'aguardando'
+            ORDER BY r.posicao ASC
+        `, [userCpf]);
+        
+        // Buscar devoluções pendentes
+        const [devolucoesPendentes] = await connection.execute(`
+            SELECT e.*, l.title, l.author
+            FROM emprestimos e
+            JOIN livros l ON e.bookId = l.id
+            WHERE e.cpf = ? AND e.status = 'pendente_devolucao'
             ORDER BY e.data_real_devolucao ASC
-        `);
-        
-        res.json(pendingReturns);
-        
-    } catch (error) {
-        console.error('Erro ao buscar devoluções:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
-
-app.post('/api/admin/approve-return', isAuthenticated, isAdmin, async (req, res) => {
-    const { bookId, cpf } = req.body;
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        await connection.beginTransaction();
-
-        
-
-        const [pendingReturns] = await connection.execute(`
-
-            SELECT e.*, l.title, u.nome as user_name
-
-            FROM emprestimos e
-
-            JOIN livros l ON e.bookId = l.id
-
-            JOIN usuarios u ON e.cpf = u.cpf
-
-            WHERE e.status = 'pendente_devolucao'
-
-            ORDER BY e.data_real_devolucao ASC
-
-        `);
-
-        
-
-        res.json(pendingReturns);
-
-        
-
-    } catch (error) {
-
-        console.error('Erro ao buscar devoluÃ§Ãµes:', error);
-
-        res.status(500).json({ error: 'Erro interno do servidor' });
-
-    } finally {
-
-        if (connection) connection.release();
-
-    }
-
-});
-
-app.post('/api/admin/approve-return', isAuthenticated, isAdmin, async (req, res) => {
-
-    const { bookId, cpf } = req.body;
-
-    
-
-    let connection;
-
-    try {
-
-        connection = await pool.getConnection();
-
-        await connection.beginTransaction();
-
-        
-
-        // Atualizar emprÃ©stimo para devolvido
-
-        const [result] = await connection.execute(`
-
-            UPDATE emprestimos 
-
-            SET status = 'devolvido', data_real_devolucao = CURDATE()
-
-            WHERE bookId = ? AND cpf = ? AND status = 'pendente_devolucao'
-
-        `, [bookId, cpf]);
-
-        
-
-        if (result.affectedRows === 0) {
-
-            await connection.rollback();
-
-            return res.status(404).json({ error: 'EmprÃ©stimo nÃ£o encontrado' });
-
-        }
-
-        
-
-        // Verificar se hÃ¡ alguÃ©m na fila para este livro
-
-        const [nextInQueue] = await connection.execute(`
-
-            SELECT cpf FROM reservas 
-
-            WHERE bookId = ? AND status = 'aguardando' 
-
-            ORDER BY posicao ASC 
-
-            LIMIT 1
-
-        `, [bookId]);
-
-        
-
-        if (nextInQueue.length > 0) {
-
-            const nextUserCpf = nextInQueue[0].cpf;
-
-            
-
-            // Atualizar status da reserva
-
-            await connection.execute(`
-
-                UPDATE reservas 
-
-                SET status = 'notificado', data_notificacao = NOW()
-
-                WHERE bookId = ? AND cpf = ?
-
-            `, [bookId, nextUserCpf]);
-
-            
-
-            // Criar notificaÃ§Ã£o
-
-            await connection.execute(`
-
-                INSERT INTO notificacoes (cpf, tipo, titulo, mensagem)
-
-                VALUES (?, 'reserva', 'Livro DisponÃ­vel!', 
-
-                        'O livro que vocÃª reservou estÃ¡ disponÃ­vel para retirada.')
-
-            `, [nextUserCpf]);
-
-        }
-
-        
-
-        await connection.commit();
-
-        res.status(200).json({ message: 'DevoluÃ§Ã£o aprovada com sucesso!' });
-
-        
-
-    } catch (error) {
-
-        if (connection) await connection.rollback();
-
-        console.error('Erro ao aprovar devoluÃ§Ã£o:', error);
-
-        res.status(500).json({ error: 'Erro interno do servidor' });
-
-    } finally {
-
-        if (connection) connection.release();
-
-    }
-
-});
-
-app.get('/api/users', isAuthenticated, isAdmin, async (req, res) => {
-
-    let connection;
-
-    try {
-
-        connection = await pool.getConnection();
-
-        
-
-        const [users] = await connection.execute(`
-
-            SELECT id, nome, cpf, email, tipo, data_cadastro
-
-            FROM usuarios
-
-            ORDER BY nome ASC
-
-        `);
-
-        
-
-        res.json(users);
-
-        
-
-    } catch (error) {
-
-        console.error('Erro ao buscar usuÃ¡rios:', error);
-
-        res.status(500).json({ error: 'Erro interno do servidor' });
-
-    } finally {
-
-        if (connection) connection.release();
-
-    }
-
-});
-
-app.post('/api/admin/add-admin', isAuthenticated, isAdmin, async (req, res) => {
-
-    const { cpf } = req.body;
-
-    
-
-    if (!cpf) {
-
-        return res.status(400).json({ error: 'CPF Ã© obrigatÃ³rio' });
-
-    }
-
-    
-
-    const cpfLimpo = cleanCPF(cpf);
-
-    
-
-    let connection;
-
-    try {
-
-        connection = await pool.getConnection();
-
-        
-
-        const [result] = await connection.execute(`
-
-            UPDATE usuarios 
-
-            SET tipo = 'admin' 
-
-            WHERE cpf = ?
-
-        `, [cpfLimpo]);
-
-        
-
-        if (result.affectedRows > 0) {
-
-            res.status(200).json({ message: 'UsuÃ¡rio promovido a administrador com sucesso!' });
-
-        } else {
-
-            res.status(404).json({ error: 'UsuÃ¡rio nÃ£o encontrado' });
-
-        }
-
-        
-
-    } catch (error) {
-
-        console.error('Erro ao promover usuÃ¡rio:', error);
-
-        res.status(500).json({ error: 'Erro interno do servidor' });
-
-    } finally {
-
-        if (connection) connection.release();
-
-    }
-
-});
-// ================================
-// ROTAS DE PERFIL MELHORADAS - Adicionar ao server.js
-// ================================
-
-// Rota para atualizar avatar do usuário
-app.put('/api/profile/avatar', isAuthenticated, async (req, res) => {
-    const { avatarUrl } = req.body;
-    const userCpf = req.session.user.cpf;
-    
-    if (!avatarUrl) {
-        return res.status(400).json({ error: 'URL do avatar é obrigatória' });
-    }
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // Atualizar avatar no banco
-        const [result] = await connection.execute(
-            'UPDATE usuarios SET avatar_url = ?, data_atualizacao = NOW() WHERE cpf = ?',
-            [avatarUrl, userCpf]
-        );
-        
-        if (result.affectedRows > 0) {
-            // Atualizar dados da sessão
-            req.session.user.avatar_url = avatarUrl;
-            
-            res.status(200).json({ 
-                message: 'Avatar atualizado com sucesso!',
-                avatar_url: avatarUrl
-            });
-        } else {
-            res.status(404).json({ error: 'Usuário não encontrado' });
-        }
-        
-    } catch (error) {
-        console.error('Erro ao atualizar avatar:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
-
-// Rota para atualizar biografia do usuário
-app.put('/api/profile/bio', isAuthenticated, async (req, res) => {
-    const { bio } = req.body;
-    const userCpf = req.session.user.cpf;
-    
-    // Validação do tamanho da biografia
-    if (bio && bio.length > 500) {
-        return res.status(400).json({ error: 'Biografia deve ter no máximo 500 caracteres' });
-    }
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // Atualizar biografia no banco
-        const [result] = await connection.execute(
-            'UPDATE usuarios SET bio = ?, data_atualizacao = NOW() WHERE cpf = ?',
-            [bio || null, userCpf]
-        );
-        
-        if (result.affectedRows > 0) {
-            // Buscar dados atualizados do usuário
-            const [userRows] = await connection.execute(
-                'SELECT nome, bio FROM usuarios WHERE cpf = ?',
-                [userCpf]
-            );
-            
-            if (userRows.length > 0) {
-                const updatedUser = userRows[0];
-                res.status(200).json({
-                    message: 'Biografia atualizada com sucesso!',
-                    nome: updatedUser.nome,
-                    bio: updatedUser.bio
-                });
-            } else {
-                res.status(404).json({ error: 'Usuário não encontrado' });
-            }
-        } else {
-            res.status(404).json({ error: 'Usuário não encontrado' });
-        }
-        
-    } catch (error) {
-        console.error('Erro ao atualizar biografia:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
-
-// Rota para atualizar dados gerais do perfil
-app.put('/api/profile/update', isAuthenticated, async (req, res) => {
-    const {
-        nome, email, tel_residencial, tel_comercial, 
-        endereco, numero, complemento, cep, cidade, estado
-    } = req.body;
-    const userCpf = req.session.user.cpf;
-    
-    // Validações básicas
-    if (nome && nome.length < 3) {
-        return res.status(400).json({ error: 'Nome deve ter pelo menos 3 caracteres' });
-    }
-    
-    if (email && !email.match(/^\S+@\S+\.\S+$/)) {
-        return res.status(400).json({ error: 'E-mail inválido' });
-    }
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // Verificar se email já existe para outro usuário
-        if (email) {
-            const [existingEmail] = await connection.execute(
-                'SELECT id FROM usuarios WHERE email = ? AND cpf != ?',
-                [email, userCpf]
-            );
-            
-            if (existingEmail.length > 0) {
-                return res.status(409).json({ error: 'Este e-mail já está em uso por outro usuário' });
-            }
-        }
-        
-        // Atualizar dados
-        const updateFields = [];
-        const updateValues = [];
-        
-        if (nome) {
-            updateFields.push('nome = ?');
-            updateValues.push(nome);
-        }
-        if (email) {
-            updateFields.push('email = ?');
-            updateValues.push(email);
-        }
-        if (tel_residencial !== undefined) {
-            updateFields.push('tel_residencial = ?');
-            updateValues.push(tel_residencial);
-        }
-        if (tel_comercial !== undefined) {
-            updateFields.push('tel_comercial = ?');
-            updateValues.push(tel_comercial);
-        }
-        if (endereco !== undefined) {
-            updateFields.push('endereco = ?');
-            updateValues.push(endereco);
-        }
-        if (numero !== undefined) {
-            updateFields.push('numero = ?');
-            updateValues.push(numero);
-        }
-        if (complemento !== undefined) {
-            updateFields.push('complemento = ?');
-            updateValues.push(complemento);
-        }
-        if (cep !== undefined) {
-            updateFields.push('cep = ?');
-            updateValues.push(cep);
-        }
-        if (cidade !== undefined) {
-            updateFields.push('cidade = ?');
-            updateValues.push(cidade);
-        }
-        if (estado !== undefined) {
-            updateFields.push('estado = ?');
-            updateValues.push(estado);
-        }
-        
-        if (updateFields.length === 0) {
-            return res.status(400).json({ error: 'Nenhum campo para atualizar' });
-        }
-        
-        updateFields.push('data_atualizacao = NOW()');
-        updateValues.push(userCpf);
-        
-        const sql = `UPDATE usuarios SET ${updateFields.join(', ')} WHERE cpf = ?`;
-        const [result] = await connection.execute(sql, updateValues);
-        
-        if (result.affectedRows > 0) {
-            // Atualizar dados da sessão se necessário
-            if (nome) req.session.user.nome = nome;
-            if (email) req.session.user.email = email;
-            
-            res.status(200).json({ message: 'Perfil atualizado com sucesso!' });
-        } else {
-            res.status(404).json({ error: 'Usuário não encontrado' });
-        }
-        
-    } catch (error) {
-        console.error('Erro ao atualizar perfil:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
-
-// Rota para obter estatísticas detalhadas do usuário
-app.get('/api/profile/stats', isAuthenticated, async (req, res) => {
-    const userCpf = req.session.user.cpf;
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // Estatísticas de empréstimos
-        const [emprestimosStats] = await connection.execute(`
-            SELECT 
-                COUNT(*) as total_emprestimos,
-                SUM(CASE WHEN status = 'ativo' THEN 1 ELSE 0 END) as emprestimos_ativos,
-                SUM(CASE WHEN status = 'devolvido' THEN 1 ELSE 0 END) as emprestimos_devolvidos,
-                SUM(CASE WHEN status = 'atrasado' THEN 1 ELSE 0 END) as emprestimos_atrasados
-            FROM emprestimos WHERE cpf = ?
-        `, [userCpf]);
-        
-        // Estatísticas de favoritos
-        const [favoritosCount] = await connection.execute(
-            'SELECT COUNT(*) as total_favoritos FROM favoritos WHERE cpf = ?',
-            [userCpf]
-        );
-        
-        // Estatísticas de resenhas
-        const [resenhasStats] = await connection.execute(`
-            SELECT 
-                COUNT(*) as total_resenhas,
-                AVG(rating) as media_avaliacoes
-            FROM resenhas WHERE cpf = ?
-        `, [userCpf]);
-        
-        // Gêneros mais lidos
-        const [generosStats] = await connection.execute(`
-            SELECT 
-                l.genre,
-                COUNT(*) as quantidade
-            FROM emprestimos e
-            JOIN livros l ON e.bookId = l.id
-            WHERE e.cpf = ? AND e.status = 'devolvido'
-            GROUP BY l.genre
-            ORDER BY quantidade DESC
-            LIMIT 5
-        `, [userCpf]);
-        
-        // Livros emprestados recentemente
-        const [livrosRecentes] = await connection.execute(`
-            SELECT 
-                l.title,
-                l.author,
-                l.cover,
-                e.data_retirada,
-                e.status
-            FROM emprestimos e
-            JOIN livros l ON e.bookId = l.id
-            WHERE e.cpf = ?
-            ORDER BY e.data_retirada DESC
-            LIMIT 5
         `, [userCpf]);
         
         res.json({
-            emprestimos: emprestimosStats[0],
-            favoritos: favoritosCount[0].total_favoritos,
-            resenhas: {
-                total: resenhasStats[0].total_resenhas,
-                media_avaliacoes: parseFloat(resenhasStats[0].media_avaliacoes || 0).toFixed(1)
-            },
-            generos_mais_lidos: generosStats,
-            livros_recentes: livrosRecentes
+            emprestados,
+            reservas,
+            devolucoesPendentes
         });
         
     } catch (error) {
-        console.error('Erro ao buscar estatísticas:', error);
+        console.error('Erro ao buscar dashboard:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
 });
 
-// Rota para alterar senha do usuário
-app.put('/api/profile/change-password', isAuthenticated, async (req, res) => {
-    const { senhaAtual, novaSenha } = req.body;
-    const userCpf = req.session.user.cpf;
-    
-    if (!senhaAtual || !novaSenha) {
-        return res.status(400).json({ error: 'Senha atual e nova senha são obrigatórias' });
-    }
-    
-    if (novaSenha.length < 8) {
-        return res.status(400).json({ error: 'Nova senha deve ter pelo menos 8 caracteres' });
-    }
-    
+// ================================
+// ROTAS ADMIN
+// ================================
+
+app.get('/api/admin/dashboard', isAuthenticated, isAdmin, async (req, res) => {
     let connection;
     try {
         connection = await pool.getConnection();
         
-        // Verificar senha atual
-        const [userRows] = await connection.execute(
-            'SELECT senha_hash FROM usuarios WHERE cpf = ?',
-            [userCpf]
-        );
+        // Estatísticas gerais
+        const [stats] = await connection.execute(`
+            SELECT 
+                (SELECT COUNT(*) FROM usuarios) as total_usuarios,
+                (SELECT COUNT(*) FROM livros) as total_livros,
+                (SELECT COUNT(*) FROM emprestimos WHERE status = 'ativo') as emprestimos_ativos,
+                (SELECT COUNT(*) FROM emprestimos WHERE status = 'pendente_devolucao') as devolucoes_pendentes
+        `);
         
-        if (userRows.length === 0) {
-            return res.status(404).json({ error: 'Usuário não encontrado' });
-        }
+        // Empréstimos ativos detalhados
+        const [emprestimos_ativos] = await connection.execute(`
+            SELECT e.*, l.title, u.nome as user_name,
+                   DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as data_devolucao_formatada,
+                   DATEDIFF(CURDATE(), e.data_prevista_devolucao) as dias_atraso
+            FROM emprestimos e
+            JOIN livros l ON e.bookId = l.id
+            JOIN usuarios u ON e.cpf = u.cpf
+            WHERE e.status = 'ativo'
+            ORDER BY e.data_prevista_devolucao ASC
+        `);
         
-        const isMatch = await bcrypt.compare(senhaAtual, userRows[0].senha_hash);
+        // Devoluções pendentes
+        const [devolucoes_pendentes] = await connection.execute(`
+            SELECT e.*, l.title, u.nome as user_name
+            FROM emprestimos e
+            JOIN livros l ON e.bookId = l.id
+            JOIN usuarios u ON e.cpf = u.cpf
+            WHERE e.status = 'pendente_devolucao'
+            ORDER BY e.data_real_devolucao ASC
+        `);
         
-        if (!isMatch) {
-            return res.status(401).json({ error: 'Senha atual incorreta' });
-        }
-        
-        // Gerar hash da nova senha
-        const salt = await bcrypt.genSalt(10);
-        const novaSenhaHash = await bcrypt.hash(novaSenha, salt);
-        
-        // Atualizar senha no banco
-        const [result] = await connection.execute(
-            'UPDATE usuarios SET senha_hash = ?, data_atualizacao = NOW() WHERE cpf = ?',
-            [novaSenhaHash, userCpf]
-        );
-        
-        if (result.affectedRows > 0) {
-            res.status(200).json({ message: 'Senha alterada com sucesso!' });
-        } else {
-            res.status(500).json({ error: 'Erro ao alterar senha' });
-        }
+        res.json({
+            stats: stats[0],
+            emprestimos_ativos,
+            devolucoes_pendentes
+        });
         
     } catch (error) {
-        console.error('Erro ao alterar senha:', error);
+        console.error('Erro ao buscar dashboard admin:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
 });
 
-// Rota para deletar conta do usuário
-app.delete('/api/profile/delete-account', isAuthenticated, async (req, res) => {
-    const { senha } = req.body;
-    const userCpf = req.session.user.cpf;
-    
-    if (!senha) {
-        return res.status(400).json({ error: 'Senha é obrigatória para deletar a conta' });
-    }
+app.post('/api/admin/approve-return', isAuthenticated, isAdmin, async (req, res) => {
+    const { bookId, cpf } = req.body;
     
     let connection;
     try {
         connection = await pool.getConnection();
         await connection.beginTransaction();
         
-        // Verificar senha
-        const [userRows] = await connection.execute(
-            'SELECT senha_hash FROM usuarios WHERE cpf = ?',
-            [userCpf]
-        );
+        // Atualizar empréstimo para devolvido
+        const [result] = await connection.execute(`
+            UPDATE emprestimos 
+            SET status = 'devolvido', data_real_devolucao = CURDATE()
+            WHERE bookId = ? AND cpf = ? AND status = 'pendente_devolucao'
+        `, [bookId, cpf]);
         
-        if (userRows.length === 0) {
+        if (result.affectedRows === 0) {
             await connection.rollback();
-            return res.status(404).json({ error: 'Usuário não encontrado' });
+            return res.status(404).json({ error: 'Empréstimo não encontrado' });
         }
         
-        const isMatch = await bcrypt.compare(senha, userRows[0].senha_hash);
+        // Verificar se há alguém na fila para este livro
+        const [nextInQueue] = await connection.execute(`
+            SELECT cpf FROM reservas 
+            WHERE bookId = ? AND status = 'aguardando' 
+            ORDER BY posicao ASC 
+            LIMIT 1
+        `, [bookId]);
         
-        if (!isMatch) {
-            await connection.rollback();
-            return res.status(401).json({ error: 'Senha incorreta' });
-        }
-        
-        // Verificar se há empréstimos ativos
-        const [emprestimosAtivos] = await connection.execute(
-            'SELECT COUNT(*) as count FROM emprestimos WHERE cpf = ? AND status = "ativo"',
-            [userCpf]
-        );
-        
-        if (emprestimosAtivos[0].count > 0) {
-            await connection.rollback();
-            return res.status(400).json({ 
-                error: 'Não é possível deletar a conta. Você possui empréstimos ativos.' 
-            });
-        }
-        
-        // Deletar usuário (as foreign keys com CASCADE vão deletar os dados relacionados)
-        const [result] = await connection.execute(
-            'DELETE FROM usuarios WHERE cpf = ?',
-            [userCpf]
-        );
-        
-        if (result.affectedRows > 0) {
-            await connection.commit();
+        if (nextInQueue.length > 0) {
+            const nextUserCpf = nextInQueue[0].cpf;
             
-            // Destruir sessão
-            req.session.destroy();
+            // Atualizar status da reserva
+            await connection.execute(`
+                UPDATE reservas 
+                SET status = 'notificado', data_notificacao = NOW()
+                WHERE bookId = ? AND cpf = ?
+            `, [bookId, nextUserCpf]);
             
-            res.status(200).json({ message: 'Conta deletada com sucesso!' });
-        } else {
-            await connection.rollback();
-            res.status(500).json({ error: 'Erro ao deletar conta' });
+            // Criar notificação
+            await connection.execute(`
+                INSERT INTO notificacoes (cpf, tipo, titulo, mensagem)
+                VALUES (?, 'reserva', 'Livro Disponível!', 
+                        'O livro que você reservou está disponível para retirada.')
+            `, [nextUserCpf]);
         }
+        
+        await connection.commit();
+        res.status(200).json({ message: 'Devolução aprovada com sucesso!' });
         
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('Erro ao deletar conta:', error);
+        console.error('Erro ao aprovar devolução:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/users', isAuthenticated, isAdmin, async (req, res) => {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        const [users] = await connection.execute(`
+            SELECT id, nome, cpf, email, tipo, livros_lidos, data_cadastro
+            FROM usuarios
+            ORDER BY nome ASC
+        `);
+        
+        res.json(users);
+        
+    } catch (error) {
+        console.error('Erro ao buscar usuários:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/admin/add-admin', isAuthenticated, isAdmin, async (req, res) => {
+    const { cpf } = req.body;
+    
+    if (!cpf) {
+        return res.status(400).json({ error: 'CPF é obrigatório' });
+    }
+    
+    const cpfLimpo = cleanCPF(cpf);
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        const [result] = await connection.execute(`
+            UPDATE usuarios 
+            SET tipo = 'admin' 
+            WHERE cpf = ?
+        `, [cpfLimpo]);
+        
+        if (result.affectedRows > 0) {
+            res.status(200).json({ message: 'Usuário promovido a administrador com sucesso!' });
+        } else {
+            res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+        
+    } catch (error) {
+        console.error('Erro ao promover usuário:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
@@ -1493,61 +1271,138 @@ app.delete('/api/profile/delete-account', isAuthenticated, async (req, res) => {
 });
 
 // ================================
-
-// MIDDLEWARE DE TRATAMENTO DE ERROS
-
+// TESTE DE CONEXÃO
 // ================================
 
-app.use((error, req, res, next) => {
+app.get('/api/test-connection', async (req, res) => {
+    let connection;
+    let count = null;
+    let totalBooks = 'N/A';
+    let tablesExist = false;
+    
+    try {
+        console.log('=== TESTE DE CONEXÃO ===');
+        console.log('Config do banco:', {
+            host: dbConfig.host,
+            user: dbConfig.user,
+            database: dbConfig.database,
+            hasPassword: !!dbConfig.password
+        });
+        
+        connection = await pool.getConnection();
+        console.log('Conexão obtida com sucesso');
+        
+        // Testar query simples
+        const [rows] = await connection.execute('SELECT 1 as test');
+        console.log('Query de teste executada:', rows);
+        
+        // Testar se a tabela livros existe
+        const [tables] = await connection.execute('SHOW TABLES LIKE "livros"');
+        tablesExist = tables.length > 0;
+        console.log('Tabela livros existe:', tablesExist);
+        
+        if (tablesExist) {
+            // Contar livros
+            [count] = await connection.execute('SELECT COUNT(*) as total FROM livros');
+            totalBooks = count[0].total;
+            console.log('Total de livros na base:', totalBooks);
+        }
+        
+        res.json({
+            connection: 'OK',
+            database: dbConfig.database,
+            tablesExist: tablesExist,
+            totalBooks: totalBooks
+        });
+        
+    } catch (error) {
+        console.error('=== ERRO NO TESTE DE CONEXÃO ===');
+        console.error('Erro:', error);
+        res.status(500).json({
+            error: 'Erro de conexão',
+            details: error.message,
+            code: error.code,
+            sqlState: error.sqlState
+        });
+    } finally {
+        if (connection) connection.release();
+    }
+});
 
-    console.error('Erro nÃ£o tratado:', error);
-
-    res.status(500).json({ 
-
-        error: 'Erro interno do servidor'
-
-    });
-
+app.get('/api/debug-books', async (req, res) => {
+    let connection;
+    let tables = []; 
+    let count = null;
+    let books = [];
+    
+    try {
+        connection = await pool.getConnection();
+        console.log('=== DEBUG LIVROS ===');
+        
+        // Verificar se tabela existe
+        [tables] = await connection.execute("SHOW TABLES LIKE 'livros'");
+        const tableExists = tables.length > 0;
+        console.log('Tabela livros existe:', tableExists);
+        
+        if (tableExists) {
+            // Verificar estrutura da tabela
+            const [structure] = await connection.execute("DESCRIBE livros");
+            console.log('Estrutura da tabela livros:');
+            structure.forEach(col => console.log(`- ${col.Field}: ${col.Type}`));
+            
+            // Contar registros
+            [count] = await connection.execute("SELECT COUNT(*) as total FROM livros");
+            console.log('Total de livros:', count[0].total);
+            
+            // Buscar alguns livros
+            [books] = await connection.execute("SELECT id, title, author FROM livros LIMIT 5");
+            console.log('Primeiros 5 livros:', books);
+        }
+        
+        res.json({
+            tableExists: tableExists,
+            totalBooks: tableExists ? count[0].total : 0,
+            sampleBooks: books 
+        });
+        
+    } catch (error) {
+        console.error('Erro no debug:', error);
+        res.status(500).json({ error: error.message });
+    } finally {
+        if (connection) connection.release();
+    }
 });
 
 // ================================
+// MIDDLEWARE DE TRATAMENTO DE ERROS
+// ================================
 
-// INICIALIZAÃ‡ÃƒO DO SERVIDOR
+app.use((error, req, res, next) => {
+    console.error('Erro não tratado:', error);
+    res.status(500).json({ 
+        error: 'Erro interno do servidor'
+    });
+});
 
+// ================================
+// INICIALIZAÇÃO DO SERVIDOR
 // ================================
 
 createPool().then(() => {
-
     app.listen(PORT, () => {
-
         console.log(`Servidor rodando em http://localhost:${PORT}`);
-
-        console.log('Rotas disponÃ­veis:');
-
-        console.log('- AutenticaÃ§Ã£o: /api/login, /api/register, /api/logout');
-
+        console.log('Rotas disponíveis:');
+        console.log('- Autenticação: /api/login, /api/register, /api/logout');
         console.log('- Livros: /api/books, /api/books/:id');
-
-        console.log('- EmprÃ©stimos: /api/loan/request, /api/loan/reserve, /api/loan/request-return');
-
+        console.log('- Empréstimos: /api/loan/request, /api/loan/reserve, /api/loan/request-return');
         console.log('- Resenhas: /api/reviews, /api/reviews/:bookId');
-
         console.log('- Favoritos: /api/favorites');
-
         console.log('- Prateleiras: /api/user/shelves');
-
         console.log('- Admin: /api/admin/*');
-
         console.log('- Dashboard: /api/user/dashboard');
-
         console.log('- Perfil: /api/profile');
-
     });
-
 }).catch(err => {
-
     console.error('Falha ao iniciar o servidor:', err);
-
     process.exit(1);
-
 });
