@@ -631,6 +631,7 @@ function setupEventListeners(user, container) {
     }
 }
 
+
 function showMessage(message, type = 'success') {
     // Remove mensagens anteriores
     const existingMessages = document.querySelectorAll('.success-message, .error-message');

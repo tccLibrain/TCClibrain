@@ -19,7 +19,6 @@ export async function renderAdminPanel(container) {
     let allBooks = [];
     
     try {
-        // Verificar se usuário é admin
         const profileResponse = await fetch('http://localhost:3000/api/profile', {
             credentials: 'include'
         });
@@ -35,10 +34,7 @@ export async function renderAdminPanel(container) {
             navigateTo('books');
             return;
         }
-        
-        console.log('Admin autenticado:', currentUser.nome);
 
-        // Carregar dados do dashboard
         const dashboardResponse = await fetch('http://localhost:3000/api/admin/dashboard', {
             credentials: 'include'
         });
@@ -49,7 +45,6 @@ export async function renderAdminPanel(container) {
             throw new Error('Erro ao carregar dashboard');
         }
 
-        // Carregar todos os livros
         const booksResponse = await fetch('http://localhost:3000/api/books', {
             credentials: 'include'
         });
@@ -69,6 +64,13 @@ export async function renderAdminPanel(container) {
 
 function renderAdminContent(container, currentUser, dashboardData, allBooks) {
     const { stats, emprestimos_ativos, devolucoes_pendentes } = dashboardData;
+    
+    // Verificar empréstimos expirados (mais de 3 dias sem confirmação)
+    const emprestimosExpirados = emprestimos_ativos.filter(emp => {
+        const dataRetirada = new Date(emp.data_retirada);
+        const diasDesdeRetirada = Math.floor((new Date() - dataRetirada) / (1000 * 60 * 60 * 24));
+        return diasDesdeRetirada > 3;
+    });
     
     container.innerHTML = `
         <style>
@@ -128,21 +130,12 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 margin-bottom: 20px;
             }
             
-            .admin-section h2 {
-                color: var(--azul-escuro);
-                margin: 0 0 15px 0;
-                padding-bottom: 10px;
-                border-bottom: 2px solid var(--cinza-claro);
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            
             .section-tabs {
                 display: flex;
                 gap: 10px;
                 margin-bottom: 20px;
                 border-bottom: 2px solid var(--cinza-claro);
+                flex-wrap: wrap;
             }
             
             .tab-btn {
@@ -167,21 +160,6 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             
             .tab-content.active {
                 display: block;
-            }
-            
-            .admin-form {
-                display: flex;
-                gap: 10px;
-                align-items: center;
-                margin-bottom: 20px;
-                flex-wrap: wrap;
-            }
-            
-            .admin-form input {
-                padding: 8px 12px;
-                border: 1px solid var(--cinza-escuro);
-                border-radius: 6px;
-                font-size: 14px;
             }
             
             .admin-list {
@@ -241,6 +219,11 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 color: #856404;
             }
             
+            .status-expired {
+                background: #f8d7da;
+                color: #721c24;
+            }
+            
             .item-actions {
                 display: flex;
                 gap: 8px;
@@ -265,6 +248,24 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 background-color: #218838;
             }
             
+            .btn-confirm {
+                background-color: #007bff;
+                color: white;
+            }
+            
+            .btn-confirm:hover {
+                background-color: #0056b3;
+            }
+            
+            .btn-cancel {
+                background-color: #dc3545;
+                color: white;
+            }
+            
+            .btn-cancel:hover {
+                background-color: #c82333;
+            }
+            
             .btn-view {
                 background-color: var(--azul-original);
                 color: white;
@@ -274,90 +275,42 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 background-color: var(--azul-escuro);
             }
             
-            .books-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-                gap: 15px;
-                max-height: 500px;
-                overflow-y: auto;
-                padding: 10px;
-            }
-            
-            .book-card-admin {
+            .report-section {
                 background: var(--cinza-claro);
+                padding: 20px;
                 border-radius: 8px;
-                padding: 10px;
-                text-align: center;
-                transition: transform 0.3s ease;
-                cursor: pointer;
+                margin-bottom: 20px;
             }
             
-            .book-card-admin:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            .report-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 20px;
+                margin-top: 20px;
             }
             
-            .book-card-admin img {
-                width: 80px;
-                height: 120px;
-                object-fit: cover;
-                border-radius: 4px;
-                margin-bottom: 8px;
+            .report-card {
+                background: var(--branco);
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             }
             
-            .book-card-admin .book-title {
-                font-size: 11px;
-                font-weight: bold;
+            .report-card h4 {
+                margin: 0 0 10px 0;
                 color: var(--azul-escuro);
-                margin-bottom: 4px;
-                line-height: 1.2;
-                overflow: hidden;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
             }
             
-            .book-card-admin .book-author {
-                font-size: 10px;
-                color: var(--azul-claro);
-                overflow: hidden;
-                display: -webkit-box;
-                -webkit-line-clamp: 1;
-                -webkit-box-orient: vertical;
+            .report-list {
+                list-style: none;
+                padding: 0;
+                margin: 0;
             }
             
-            .book-status-badge {
-                font-size: 9px;
-                padding: 2px 6px;
-                border-radius: 8px;
-                margin-top: 4px;
-                display: inline-block;
-            }
-            
-            .available {
-                background: #d4edda;
-                color: #155724;
-            }
-            
-            .borrowed {
-                background: #f8d7da;
-                color: #721c24;
-            }
-            
-            .empty-state {
-                text-align: center;
-                padding: 40px 20px;
-                color: var(--azul-claro);
-                font-style: italic;
-            }
-            
-            .search-box {
-                width: 100%;
-                padding: 10px;
-                border: 1px solid var(--cinza-escuro);
-                border-radius: 6px;
-                margin-bottom: 15px;
+            .report-list li {
+                padding: 5px 0;
                 font-size: 14px;
+                color: var(--azul-claro);
             }
             
             .actions-row {
@@ -371,11 +324,6 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             @media (max-width: 768px) {
                 .admin-stats {
                     grid-template-columns: repeat(2, 1fr);
-                }
-                
-                .books-grid {
-                    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-                    gap: 10px;
                 }
                 
                 .item-actions {
@@ -418,11 +366,19 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                     <button class="tab-btn" data-tab="emprestimos">
                         Empréstimos Ativos (${emprestimos_ativos.length})
                     </button>
+                    ${emprestimosExpirados.length > 0 ? `
+                        <button class="tab-btn" data-tab="expirados">
+                            ⚠️ Expirados (${emprestimosExpirados.length})
+                        </button>
+                    ` : ''}
                     <button class="tab-btn" data-tab="catalogo">
-                        Catálogo Completo (${allBooks.length})
+                        Catálogo (${allBooks.length})
                     </button>
                     <button class="tab-btn" data-tab="usuarios">
                         Gerenciar Usuários
+                    </button>
+                    <button class="tab-btn" data-tab="relatorio">
+                        📊 Relatórios
                     </button>
                 </div>
 
@@ -443,11 +399,11 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                                         <button class="btn-small btn-approve" 
                                                 data-bookid="${dev.bookId}" 
                                                 data-cpf="${dev.cpf}">
-                                            Aprovar Devolução
+                                            ✓ Aprovar Devolução
                                         </button>
                                         <button class="btn-small btn-view" 
                                                 data-bookid="${dev.bookId}">
-                                            Ver Detalhes
+                                            👁 Ver Detalhes
                                         </button>
                                     </div>
                                 </li>
@@ -461,43 +417,92 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                     <h2>Empréstimos Ativos</h2>
                     <ul class="admin-list">
                         ${emprestimos_ativos.length > 0 ? 
-                            emprestimos_ativos.map(emp => `
-                                <li>
-                                    <div class="item-info">
-                                        <div class="item-title">${emp.title || 'Livro ID: ' + emp.bookId}</div>
-                                        <div class="item-subtitle">
-                                            Emprestado para: ${emp.user_name || emp.cpf}<br>
-                                            Devolução prevista: ${emp.data_devolucao_formatada || 'Não informada'}
+                            emprestimos_ativos.map(emp => {
+                                const dataRetirada = new Date(emp.data_retirada);
+                                const diasDesdeRetirada = Math.floor((new Date() - dataRetirada) / (1000 * 60 * 60 * 24));
+                                const precisaConfirmacao = diasDesdeRetirada === 0;
+                                
+                                return `
+                                    <li>
+                                        <div class="item-info">
+                                            <div class="item-title">${emp.title || 'Livro ID: ' + emp.bookId}</div>
+                                            <div class="item-subtitle">
+                                                Emprestado para: ${emp.user_name || emp.cpf}<br>
+                                                Devolução prevista: ${emp.data_devolucao_formatada || 'Não informada'}
+                                            </div>
+                                            <span class="item-status ${emp.dias_atraso > 0 ? 'status-overdue' : (precisaConfirmacao ? 'status-pending' : 'status-active')}">
+                                                ${emp.dias_atraso > 0 ? `${emp.dias_atraso} dias de atraso` : (precisaConfirmacao ? 'Aguardando Retirada' : 'Em dia')}
+                                            </span>
                                         </div>
-                                        <span class="item-status ${emp.dias_atraso > 0 ? 'status-overdue' : 'status-active'}">
-                                            ${emp.dias_atraso > 0 ? `${emp.dias_atraso} dias de atraso` : 'Em dia'}
-                                        </span>
-                                    </div>
-                                    <div class="item-actions">
-                                        <button class="btn-small btn-view" 
-                                                data-bookid="${emp.bookId}">
-                                            Ver Detalhes
-                                        </button>
-                                    </div>
-                                </li>
-                            `).join('') 
+                                        <div class="item-actions">
+                                            ${precisaConfirmacao ? `
+                                                <button class="btn-small btn-confirm" 
+                                                        data-bookid="${emp.bookId}"
+                                                        data-cpf="${emp.cpf}">
+                                                    ✓ Confirmar Retirada
+                                                </button>
+                                            ` : ''}
+                                            <button class="btn-small btn-view" 
+                                                    data-bookid="${emp.bookId}">
+                                                👁 Ver Detalhes
+                                            </button>
+                                        </div>
+                                    </li>
+                                `;
+                            }).join('') 
                             : '<li class="empty-state">Nenhum empréstimo ativo</li>'
                         }
                     </ul>
                 </div>
 
+                ${emprestimosExpirados.length > 0 ? `
+                    <div id="expirados" class="tab-content">
+                        <h2>Empréstimos Expirados (Não Retirados)</h2>
+                        <p style="color: #856404; padding: 10px; background: #fff3cd; border-radius: 6px; margin-bottom: 15px;">
+                            ⚠️ Estes empréstimos não foram confirmados há mais de 3 dias. Considere cancelá-los.
+                        </p>
+                        <ul class="admin-list">
+                            ${emprestimosExpirados.map(emp => `
+                                <li>
+                                    <div class="item-info">
+                                        <div class="item-title">${emp.title || 'Livro ID: ' + emp.bookId}</div>
+                                        <div class="item-subtitle">
+                                            Para: ${emp.user_name || emp.cpf}<br>
+                                            Solicitado há ${Math.floor((new Date() - new Date(emp.data_retirada)) / (1000 * 60 * 60 * 24))} dias
+                                        </div>
+                                        <span class="item-status status-expired">Expirado</span>
+                                    </div>
+                                    <div class="item-actions">
+                                        <button class="btn-small btn-confirm" 
+                                                data-bookid="${emp.bookId}"
+                                                data-cpf="${emp.cpf}">
+                                            ✓ Confirmar Retirada
+                                        </button>
+                                        <button class="btn-small btn-cancel" 
+                                                data-bookid="${emp.bookId}"
+                                                data-cpf="${emp.cpf}">
+                                            ✖ Cancelar Empréstimo
+                                        </button>
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+
                 <div id="catalogo" class="tab-content">
                     <h2>Catálogo Completo de Livros</h2>
-                    <input type="text" class="search-box" id="book-search" placeholder="Pesquisar livros...">
-                    <div class="books-grid" id="books-grid">
+                    <input type="text" class="search-box" id="book-search" placeholder="Pesquisar livros..." style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid var(--cinza-escuro); border-radius: 6px;">
+                    <div class="books-grid" id="books-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto; padding: 10px;">
                         ${allBooks.map(book => `
-                            <div class="book-card-admin" data-bookid="${book.id}">
+                            <div class="book-card-admin" data-bookid="${book.id}" style="background: var(--cinza-claro); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: transform 0.3s ease;">
                                 <img src="${book.cover || createPlaceholderImage(book.title)}" 
                                      alt="${book.title}"
+                                     style="width: 80px; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;"
                                      onerror="this.src='${createPlaceholderImage('Erro')}'">
-                                <div class="book-title">${book.title || 'Título não disponível'}</div>
-                                <div class="book-author">${book.author || 'Autor desconhecido'}</div>
-                                <span class="book-status-badge ${book.available !== false ? 'available' : 'borrowed'}">
+                                <div class="book-title" style="font-size: 11px; font-weight: bold; color: var(--azul-escuro); margin-bottom: 4px; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${book.title || 'Título não disponível'}</div>
+                                <div class="book-author" style="font-size: 10px; color: var(--azul-claro); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;">${book.author || 'Autor desconhecido'}</div>
+                                <span class="book-status-badge ${book.available !== false ? 'available' : 'borrowed'}" style="font-size: 9px; padding: 2px 6px; border-radius: 8px; margin-top: 4px; display: inline-block; ${book.available !== false ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}">
                                     ${book.available !== false ? 'Disponível' : 'Emprestado'}
                                 </span>
                             </div>
@@ -507,19 +512,25 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
 
                 <div id="usuarios" class="tab-content">
                     <h2>Gerenciar Usuários</h2>
-                    <div class="admin-form">
-                        <input type="text" id="admin-cpf" placeholder="CPF do usuário" maxlength="14">
+                    <div class="admin-form" style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
+                        <input type="text" id="admin-cpf" placeholder="CPF do usuário" maxlength="14" style="padding: 8px 12px; border: 1px solid var(--cinza-escuro); border-radius: 6px; font-size: 14px;">
                         <button id="btn-add-admin" class="btn">Promover a Admin</button>
                     </div>
                     <div id="users-list">
                         <p>Carregando lista de usuários...</p>
                     </div>
                 </div>
+
+                <div id="relatorio" class="tab-content">
+                    <h2>Relatórios e Estatísticas</h2>
+                    <button id="btn-load-report" class="btn" style="margin-bottom: 20px;">Gerar Relatório Completo</button>
+                    <div id="report-content">
+                        <p style="text-align: center; color: var(--azul-claro);">Clique no botão acima para gerar o relatório</p>
+                    </div>
+                </div>
             </div>
 
             <div class="actions-row">
-                <button id="btn-relatorio" class="btn">Gerar Relatório</button>
-                <button id="btn-configuracoes" class="btn">Configurações</button>
                 <button id="btn-logout" class="btn btn-secondary">Sair do Sistema</button>
             </div>
         </div>
@@ -537,18 +548,15 @@ function setupAdminEventListeners(container, allBooks) {
         btn.addEventListener('click', () => {
             const targetTab = btn.dataset.tab;
             
-            // Remover active de todas as abas
             tabBtns.forEach(b => b.classList.remove('active'));
             tabContents.forEach(c => c.classList.remove('active'));
             
-            // Adicionar active na aba clicada
             btn.classList.add('active');
             const targetContent = container.querySelector(`#${targetTab}`);
             if (targetContent) {
                 targetContent.classList.add('active');
             }
 
-            // Carregar dados específicos da aba se necessário
             if (targetTab === 'usuarios') {
                 loadUsersList();
             }
@@ -616,6 +624,64 @@ function setupAdminEventListeners(container, allBooks) {
             }
         }
 
+        // Confirmar retirada
+        if (e.target.classList.contains('btn-confirm')) {
+            const bookId = e.target.dataset.bookid;
+            const cpf = e.target.dataset.cpf;
+
+            if (!confirm('Confirmar que o usuário retirou o livro?')) return;
+
+            try {
+                const response = await fetch('http://localhost:3000/api/admin/confirm-pickup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ bookId: parseInt(bookId), cpf })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'Retirada confirmada!');
+                    renderAdminPanel(container);
+                } else {
+                    const error = await response.json();
+                    alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                }
+            } catch (error) {
+                console.error('Erro ao confirmar retirada:', error);
+                alert('Erro de conexão.');
+            }
+        }
+
+        // Cancelar empréstimo expirado
+        if (e.target.classList.contains('btn-cancel')) {
+            const bookId = e.target.dataset.bookid;
+            const cpf = e.target.dataset.cpf;
+
+            if (!confirm('Cancelar este empréstimo e notificar o próximo da fila?')) return;
+
+            try {
+                const response = await fetch('http://localhost:3000/api/admin/cancel-expired-loan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ bookId: parseInt(bookId), cpf })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'Empréstimo cancelado!');
+                    renderAdminPanel(container);
+                } else {
+                    const error = await response.json();
+                    alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                }
+            } catch (error) {
+                console.error('Erro ao cancelar empréstimo:', error);
+                alert('Erro de conexão.');
+            }
+        }
+
         // Ver detalhes do livro
         if (e.target.classList.contains('btn-view')) {
             const bookId = e.target.dataset.bookid;
@@ -628,7 +694,6 @@ function setupAdminEventListeners(container, allBooks) {
     const cpfInput = container.querySelector('#admin-cpf');
 
     if (addAdminBtn && cpfInput) {
-        // Máscara para CPF
         cpfInput.addEventListener('input', (e) => {
             let value = e.target.value.replace(/\D/g, '');
             value = value.replace(/(\d{3})(\d)/, '$1.$2');
@@ -668,6 +733,32 @@ function setupAdminEventListeners(container, allBooks) {
             } catch (error) {
                 console.error('Erro ao promover usuário:', error);
                 alert('Erro de conexão.');
+            }
+        });
+    }
+
+    // Gerar relatório
+    const btnLoadReport = container.querySelector('#btn-load-report');
+    const reportContent = container.querySelector('#report-content');
+
+    if (btnLoadReport && reportContent) {
+        btnLoadReport.addEventListener('click', async () => {
+            reportContent.innerHTML = '<p style="text-align: center;">Carregando relatório...</p>';
+
+            try {
+                const response = await fetch('http://localhost:3000/api/admin/report', {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    renderReport(reportContent, data);
+                } else {
+                    reportContent.innerHTML = '<p style="color: red;">Erro ao carregar relatório</p>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar relatório:', error);
+                reportContent.innerHTML = '<p style="color: red;">Erro de conexão</p>';
             }
         });
     }
@@ -717,27 +808,75 @@ function setupAdminEventListeners(container, allBooks) {
         }
     }
 
-    // Outros botões
+    // Função para renderizar relatório
+    function renderReport(reportContent, data) {
+        const { stats, topBooks, topUsers, monthlyLoans } = data;
+
+        reportContent.innerHTML = `
+            <div class="report-section">
+                <h3 style="color: var(--azul-escuro); margin-bottom: 15px;">Estatísticas Gerais</h3>
+                <div class="report-grid">
+                    <div class="report-card">
+                        <h4>Total de Leitores</h4>
+                        <p style="font-size: 24px; font-weight: bold; color: var(--azul-original);">${stats.total_leitores}</p>
+                    </div>
+                    <div class="report-card">
+                        <h4>Empréstimos Concluídos</h4>
+                        <p style="font-size: 24px; font-weight: bold; color: #28a745;">${stats.emprestimos_concluidos}</p>
+                    </div>
+                    <div class="report-card">
+                        <h4>Empréstimos Atrasados</h4>
+                        <p style="font-size: 24px; font-weight: bold; color: #dc3545;">${stats.emprestimos_atrasados}</p>
+                    </div>
+                    <div class="report-card">
+                        <h4>Média de Avaliações</h4>
+                        <p style="font-size: 24px; font-weight: bold; color: #ffc107;">${stats.media_avaliacoes ? parseFloat(stats.media_avaliacoes).toFixed(1) + '/5' : 'N/A'}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-section">
+                <h3 style="color: var(--azul-escuro); margin-bottom: 15px;">Livros Mais Emprestados</h3>
+                <div class="report-card">
+                    <ul class="report-list">
+                        ${topBooks.map((book, index) => `
+                            <li><strong>${index + 1}.</strong> ${book.title} - ${book.total_emprestimos} empréstimos</li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="report-section">
+                <h3 style="color: var(--azul-escuro); margin-bottom: 15px;">Usuários Mais Ativos</h3>
+                <div class="report-card">
+                    <ul class="report-list">
+                        ${topUsers.map((user, index) => `
+                            <li><strong>${index + 1}.</strong> ${user.nome} - ${user.total_emprestimos} empréstimos | ${user.livros_lidos} livros lidos</li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="report-section">
+                <h3 style="color: var(--azul-escuro); margin-bottom: 15px;">Empréstimos por Mês</h3>
+                <div class="report-card">
+                    <ul class="report-list">
+                        ${monthlyLoans.map(month => `
+                            <li><strong>${month.mes}:</strong> ${month.total} empréstimos</li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
+    // Logout
     const logoutBtn = container.querySelector('#btn-logout');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
             if (confirm('Deseja realmente sair do sistema?')) {
                 performLogout();
             }
-        });
-    }
-
-    const relatorioBtn = container.querySelector('#btn-relatorio');
-    if (relatorioBtn) {
-        relatorioBtn.addEventListener('click', () => {
-            alert('Funcionalidade de relatório será implementada em breve.');
-        });
-    }
-
-    const configBtn = container.querySelector('#btn-configuracoes');
-    if (configBtn) {
-        configBtn.addEventListener('click', () => {
-            alert('Funcionalidades de configuração serão implementadas em breve.');
         });
     }
 }
