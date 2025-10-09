@@ -2,11 +2,11 @@ import { navigateTo } from '../main.js';
 import fundoTopoPerfil from '../images/fundoTopoPerfil.png';
 
 export async function renderUserProfile(container) {
-    // Limpa o conteúdo existente do container antes de renderizar o perfil
     container.innerHTML = ''; 
 
-    // 1. Fazer requisição para o backend para obter os dados do perfil
     let user = null;
+    let conquistas = [];
+    
     try {
         const response = await fetch('http://localhost:3000/api/profile', {
             method: 'GET',
@@ -24,6 +24,15 @@ export async function renderUserProfile(container) {
             alert(errorData.error || 'Erro ao carregar perfil.');
             return;
         }
+
+        // Buscar conquistas
+        const conquistasResponse = await fetch('http://localhost:3000/api/user/achievements', {
+            credentials: 'include'
+        });
+        
+        if (conquistasResponse.ok) {
+            conquistas = await conquistasResponse.json();
+        }
     } catch (error) {
         console.error('Erro ao carregar perfil:', error);
         alert('Não foi possível carregar o perfil. Verifique a conexão com o servidor.');
@@ -35,6 +44,10 @@ export async function renderUserProfile(container) {
     const avatarUrl = user.avatar_url || 'https://i.pravatar.cc/150?img=12';
     const bioTexto = user.bio || 'Ainda não tem uma biografia';
     const dataCadastro = user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString('pt-BR') : 'Não informado';
+
+    // Separar conquistas desbloqueadas e bloqueadas
+    const conquistasDesbloqueadas = conquistas.filter(c => c.desbloqueada);
+    const conquistasBloqueadas = conquistas.filter(c => !c.desbloqueada);
 
     const profileWrapper = document.createElement('div');
     profileWrapper.className = 'profile-container';
@@ -50,8 +63,6 @@ export async function renderUserProfile(container) {
                 padding-left: 0;
             }
             
-            
-            /* Correção para o container do fundo do perfil */
             .containerFundoPerfil {
                 position: relative;
                 width: 100%;
@@ -66,7 +77,6 @@ export async function renderUserProfile(container) {
                 border-bottom-right-radius: 20px;
             }
 
-            /* Container do avatar - centralizado e com tamanho adequado */
             .avatar-edit {
                 cursor: pointer;
                 position: relative;
@@ -75,12 +85,12 @@ export async function renderUserProfile(container) {
                 align-items: center;
                 width: 130px;
                 height: 130px;
-                border-radius: 60%;
+                border-radius: 50%;
                 overflow: hidden;
                 border: 4px solid #fff;
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
                 transition: transform 0.3s ease;
-                background: #f0f0f0; /* fallback caso a imagem não carregue */
+                background: #f0f0f0;
                 margin-left: 70%;
                 margin-top: 25px;
             }
@@ -89,17 +99,15 @@ export async function renderUserProfile(container) {
                 transform: scale(1.05);
             }
 
-            /* Imagem do avatar - ocupa todo o espaço do container */
             .profile-avatar {
                 width: 100%;
                 height: 100%;
                 object-fit: cover;
                 border-radius: 50%;
                 display: block;
-                border: none; /* remove qualquer borda adicional */
+                border: none;
             }
 
-            /* Garantir que o input file não interfira */
             #avatar-input {
                 display: none !important;
                 position: absolute;
@@ -179,7 +187,7 @@ export async function renderUserProfile(container) {
             .profile-info p {
                 margin: 0;
                 color: #434E70;
-                font-size: 20px;
+                font-size: 16px;
                 line-height: 1.5;
                 cursor: pointer;
                 padding: 8px;
@@ -198,105 +206,208 @@ export async function renderUserProfile(container) {
                 margin: 20px auto;
             }
 
-            /* Seção de estatísticas reformulada para uma única estatística */
-.profile-stats {
-    padding: 20px;
-    margin: 0;
-    display: flex;
-    justify-content: center;
-}
+            .profile-stats {
+                padding: 20px;
+                margin: 0;
+                display: flex;
+                justify-content: center;
+            }
 
-.stat-item {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 20px;
-    padding: 30px;
-    text-align: center;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
-    width: 100%;
-    max-width: 400px;
-    border: 2px solid transparent;
-}
+            .stat-item {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                border-radius: 20px;
+                padding: 30px;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+                transition: all 0.3s ease;
+                width: 100%;
+                max-width: 400px;
+                border: 2px solid transparent;
+            }
 
-.stat-item:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 25px rgba(67, 78, 112, 0.2);
-    border-color: #9bb4ff;
-}
+            .stat-item:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 8px 25px rgba(67, 78, 112, 0.2);
+                border-color: #9bb4ff;
+            }
 
-.stat-item h3 {
-    margin: 0 0 15px 0;
-    color: #434E70;
-    font-family: 'Arial Black', arial, sans-serif;
-    font-size: 24px;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
-}
+            .stat-item h3 {
+                margin: 0 0 15px 0;
+                color: #434E70;
+                font-family: 'Arial Black', arial, sans-serif;
+                font-size: 24px;
+                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+            }
 
-.stat-item p {
-    margin: 0;
-    color: #9bb4ff;
-    font-family: 'Arial Black', arial, sans-serif;
-    font-size: 48px;
-    font-weight: bold;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
-    position: relative;
-}
+            .stat-item p {
+                margin: 0;
+                color: #9bb4ff;
+                font-family: 'Arial Black', arial, sans-serif;
+                font-size: 48px;
+                font-weight: bold;
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+                position: relative;
+            }
 
-/* Efeito de brilho no número */
-.stat-item p::after {
-    content: '';
-    position: absolute;
-    top: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 60%;
-    height: 3px;
-    background: linear-gradient(90deg, transparent, #9bb4ff, transparent);
-    border-radius: 2px;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
+            .stat-item p::after {
+                content: '';
+                position: absolute;
+                top: -10px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 60%;
+                height: 3px;
+                background: linear-gradient(90deg, transparent, #9bb4ff, transparent);
+                border-radius: 2px;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
 
-.stat-item:hover p::after {
-    opacity: 1;
-}
+            .stat-item:hover p::after {
+                opacity: 1;
+            }
 
-/* Versão alternativa mais compacta */
-.stat-item.compact {
-    padding: 20px;
-    max-width: 300px;
-}
+            /* Seção de Conquistas */
+            .achievements-section {
+                padding: 20px;
+                margin: 20px;
+                background: #fff;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            }
 
-.stat-item.compact h3 {
-    font-size: 20px;
-    margin-bottom: 10px;
-}
+            .achievements-section h3 {
+                color: #434E70;
+                font-family: 'Arial Black', arial, sans-serif;
+                font-size: 20px;
+                margin: 0 0 20px 0;
+                text-align: center;
+            }
 
-.stat-item.compact p {
-    font-size: 36px;
-}
+            .achievements-tabs {
+                display: flex;
+                justify-content: center;
+                gap: 10px;
+                margin-bottom: 20px;
+            }
 
-/* Responsividade */
-@media (max-width: 768px) {
-    .profile-stats {
-        padding: 15px;
-    }
-    
-    .stat-item {
-        padding: 25px 20px;
-        max-width: none;
-        width: calc(100% - 30px);
-        margin: 0 15px;
-    }
-    
-    .stat-item h3 {
-        font-size: 20px;
-    }
-    
-    .stat-item p {
-        font-size: 40px;
-    }
-}
+            .achievement-tab {
+                padding: 10px 20px;
+                border: none;
+                background: #e9ecef;
+                color: #434E70;
+                border-radius: 20px;
+                cursor: pointer;
+                font-family: arial black;
+                font-size: 14px;
+                transition: all 0.3s ease;
+            }
+
+            .achievement-tab.active {
+                background: #9bb4ff;
+                color: #fff;
+            }
+
+            .achievements-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 15px;
+            }
+
+            .achievement-card {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                border-radius: 12px;
+                padding: 15px;
+                text-align: center;
+                transition: all 0.3s ease;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .achievement-card.unlocked {
+                background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+                border: 2px solid #51cf66;
+                box-shadow: 0 4px 12px rgba(81, 207, 102, 0.3);
+            }
+
+            .achievement-card.locked {
+                opacity: 0.5;
+                filter: grayscale(100%);
+            }
+
+            .achievement-card:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+            }
+
+            .achievement-icon {
+                font-size: 48px;
+                margin-bottom: 10px;
+            }
+
+            .achievement-name {
+                font-family: 'Arial Black', arial, sans-serif;
+                font-size: 14px;
+                color: #434E70;
+                margin-bottom: 5px;
+            }
+
+            .achievement-description {
+                font-size: 11px;
+                color: #6c757d;
+                line-height: 1.3;
+            }
+
+            .achievement-badge {
+                position: absolute;
+                top: 5px;
+                right: 5px;
+                background: #51cf66;
+                color: white;
+                border-radius: 50%;
+                width: 24px;
+                height: 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 14px;
+            }
+
+            .achievements-progress {
+                background: #e9ecef;
+                border-radius: 8px;
+                padding: 15px;
+                margin-bottom: 20px;
+                text-align: center;
+            }
+
+            .progress-text {
+                font-family: 'Arial Black', arial, sans-serif;
+                color: #434E70;
+                font-size: 16px;
+                margin-bottom: 10px;
+            }
+
+            .progress-bar-container {
+                background: #fff;
+                height: 20px;
+                border-radius: 10px;
+                overflow: hidden;
+                position: relative;
+            }
+
+            .progress-bar-fill {
+                background: linear-gradient(90deg, #51cf66 0%, #40c057 100%);
+                height: 100%;
+                transition: width 0.5s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-size: 12px;
+                font-weight: bold;
+            }
+
             .profile-footer {
                 padding: 20px;
                 margin: 0;
@@ -363,6 +474,25 @@ export async function renderUserProfile(container) {
                 text-align: center;
                 font-size: 14px;
             }
+
+            @media (max-width: 768px) {
+                .achievements-grid {
+                    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+                    gap: 10px;
+                }
+
+                .achievement-icon {
+                    font-size: 36px;
+                }
+
+                .achievement-name {
+                    font-size: 12px;
+                }
+
+                .achievement-description {
+                    font-size: 10px;
+                }
+            }
         </style>
 
         <div>
@@ -396,6 +526,44 @@ export async function renderUserProfile(container) {
                     <p>${livrosLidos}</p>
                 </div>
             </div>
+
+            <div class="achievements-section">
+                <h3>🏆 Conquistas</h3>
+                
+                <div class="achievements-progress">
+                    <div class="progress-text">
+                        ${conquistasDesbloqueadas.length} de ${conquistas.length} conquistas desbloqueadas
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill" style="width: ${conquistas.length > 0 ? (conquistasDesbloqueadas.length / conquistas.length * 100) : 0}%">
+                            ${conquistas.length > 0 ? Math.round(conquistasDesbloqueadas.length / conquistas.length * 100) : 0}%
+                        </div>
+                    </div>
+                </div>
+
+                <div class="achievements-tabs">
+                    <button class="achievement-tab active" data-tab="all">
+                        Todas (${conquistas.length})
+                    </button>
+                    <button class="achievement-tab" data-tab="unlocked">
+                        Desbloqueadas (${conquistasDesbloqueadas.length})
+                    </button>
+                    <button class="achievement-tab" data-tab="locked">
+                        Bloqueadas (${conquistasBloqueadas.length})
+                    </button>
+                </div>
+
+                <div class="achievements-grid" id="achievements-grid">
+                    ${conquistas.map(conquista => `
+                        <div class="achievement-card ${conquista.desbloqueada ? 'unlocked' : 'locked'}" data-type="${conquista.desbloqueada ? 'unlocked' : 'locked'}">
+                            ${conquista.desbloqueada ? '<div class="achievement-badge">✓</div>' : ''}
+                            <div class="achievement-icon">${conquista.icone}</div>
+                            <div class="achievement-name">${conquista.nome}</div>
+                            <div class="achievement-description">${conquista.descricao}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
     
             <div class="profile-footer">
                 <p>Usuário cadastrado em ${dataCadastro}</p>
@@ -406,24 +574,44 @@ export async function renderUserProfile(container) {
 
     container.appendChild(profileWrapper);
 
-    // Event listeners
-    setupEventListeners(user, container);
+    setupEventListeners(user, container, conquistas);
 }
 
-function setupEventListeners(user, container) {
+function setupEventListeners(user, container, conquistas) {
     const avatarInput = document.getElementById('avatar-input');
     const avatarImg = document.getElementById('profile-avatar');
     const bioText = document.getElementById('bioText');
     const bioContainer = document.getElementById('bioContainer');
     const logoutBtn = document.getElementById('logoutBtn');
 
+    // Sistema de tabs de conquistas
+    const tabs = container.querySelectorAll('.achievement-tab');
+    const achievementsGrid = container.querySelector('#achievements-grid');
+    const achievementCards = achievementsGrid.querySelectorAll('.achievement-card');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            const filter = tab.dataset.tab;
+            
+            achievementCards.forEach(card => {
+                if (filter === 'all') {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = card.dataset.type === filter ? 'block' : 'none';
+                }
+            });
+        });
+    });
+
     // Handler para upload de avatar
     avatarInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Validações do arquivo
-        const maxSize = 5 * 1024 * 1024; // 5MB
+        const maxSize = 5 * 1024 * 1024;
         const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
         
         if (!allowedTypes.includes(file.type)) {
@@ -455,10 +643,8 @@ function setupEventListeners(user, container) {
                 const result = await response.json();
 
                 if (response.ok) {
-                    // Atualiza a imagem na interface
                     avatarImg.src = newAvatar;
                     
-                    // Atualiza avatar no header se existir
                     const headerAvatar = document.querySelector('.shell-header .avatar');
                     if (headerAvatar) {
                         headerAvatar.src = newAvatar;
@@ -471,7 +657,6 @@ function setupEventListeners(user, container) {
             } catch (error) {
                 console.error('Erro ao atualizar avatar:', error);
                 showMessage(`Erro ao atualizar avatar: ${error.message}`, 'error');
-                // Reverter para avatar anterior em caso de erro
                 avatarImg.src = user.avatar_url || 'https://i.pravatar.cc/150?img=12';
             } finally {
                 showLoadingState(avatarImg, false);
@@ -488,7 +673,6 @@ function setupEventListeners(user, container) {
 
     // Handler para edição de biografia
     bioText.addEventListener('click', () => {
-        // Previne múltiplas edições simultâneas
         if (bioContainer.querySelector('textarea')) return;
 
         const currentBio = bioText.textContent.trim() === 'Ainda não tem uma biografia' ? '' : bioText.textContent.trim();
@@ -512,7 +696,6 @@ function setupEventListeners(user, container) {
 
         bioTextarea.focus();
 
-        // Handler para salvar biografia
         saveBioBtn.addEventListener('click', async () => {
             const newBio = bioTextarea.value.trim();
             
@@ -536,10 +719,8 @@ function setupEventListeners(user, container) {
                 const result = await response.json();
 
                 if (response.ok) {
-                    // Atualizar dados do usuário
                     user.bio = result.bio;
                     
-                    // Restaurar visualização normal
                     bioContainer.innerHTML = `
                         <h2>${user.nome}</h2>
                         <p id="bioText" title="Clique para editar sua biografia">
@@ -547,7 +728,6 @@ function setupEventListeners(user, container) {
                         </p>
                     `;
                     
-                    // Recriar o listener de clique
                     const newBioText = document.getElementById('bioText');
                     newBioText.addEventListener('click', () => {
                         bioText.click();
@@ -565,7 +745,6 @@ function setupEventListeners(user, container) {
             }
         });
 
-        // Handler para cancelar edição
         cancelBioBtn.addEventListener('click', () => {
             bioContainer.innerHTML = `
                 <h2>${user.nome}</h2>
@@ -574,14 +753,12 @@ function setupEventListeners(user, container) {
                 </p>
             `;
             
-            // Recriar o listener de clique
             const newBioText = document.getElementById('bioText');
             newBioText.addEventListener('click', () => {
                 bioText.click();
             });
         });
 
-        // Atalho para salvar com Ctrl+Enter
         bioTextarea.addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.key === 'Enter') {
                 saveBioBtn.click();
@@ -607,7 +784,6 @@ function setupEventListeners(user, container) {
                     sessionStorage.clear();
                     showMessage('Logout realizado com sucesso!', 'success');
                     
-                    // Redirecionar após pequeno delay
                     setTimeout(() => {
                         navigateTo('login');
                     }, 1500);
@@ -618,7 +794,6 @@ function setupEventListeners(user, container) {
                 console.error('Erro ao fazer logout:', error);
                 showMessage('Erro ao fazer logout. Tentando novamente...', 'error');
                 
-                // Forçar logout local mesmo com erro no servidor
                 setTimeout(() => {
                     localStorage.removeItem('user');
                     sessionStorage.clear();
@@ -631,9 +806,7 @@ function setupEventListeners(user, container) {
     }
 }
 
-
 function showMessage(message, type = 'success') {
-    // Remove mensagens anteriores
     const existingMessages = document.querySelectorAll('.success-message, .error-message');
     existingMessages.forEach(msg => msg.remove());
 
@@ -644,7 +817,6 @@ function showMessage(message, type = 'success') {
     const profileFooter = document.querySelector('.profile-footer');
     profileFooter.insertBefore(messageDiv, profileFooter.firstChild);
 
-    // Remover mensagem após 5 segundos
     setTimeout(() => {
         if (messageDiv.parentNode) {
             messageDiv.remove();
@@ -662,7 +834,6 @@ function showBioMessage(message, type = 'success') {
         </div>
     `;
 
-    // Remover mensagem após 5 segundos
     setTimeout(() => {
         messageContainer.innerHTML = '';
     }, 5000);
