@@ -420,3 +420,214 @@ LEFT JOIN favoritos f ON u.cpf = f.cpf
 LEFT JOIN resenhas r ON u.cpf = r.cpf
 LEFT JOIN prateleiras p ON u.cpf = p.cpf
 GROUP BY u.cpf;
+
+
+-- Adicionar novo status ao ENUM
+ALTER TABLE emprestimos 
+MODIFY COLUMN status ENUM('aguardando_retirada', 'ativo', 'devolvido', 'atrasado', 'pendente_devolucao') 
+DEFAULT 'aguardando_retirada';
+
+
+-- ==========================================
+-- SCRIPT DE CORREÇÃO DE EMPRÉSTIMOS
+-- Execute este SQL no MySQL
+-- ==========================================
+
+-- 1. Primeiro, adicionar a coluna se não existir
+ALTER TABLE emprestimos 
+MODIFY COLUMN status ENUM('aguardando_retirada', 'ativo', 'devolvido', 'atrasado', 'pendente_devolucao') 
+DEFAULT 'aguardando_retirada';
+
+-- 2. Atualizar empréstimos antigos (criados antes de hoje) para status "ativo"
+-- Eles já foram retirados, apenas o sistema não tinha essa funcionalidade antes
+UPDATE emprestimos 
+SET status = 'ativo' 
+WHERE status = 'aguardando_retirada' 
+  AND DATE(data_retirada) < CURDATE();
+
+-- 3. Verificar quantos foram atualizados
+SELECT 
+    COUNT(*) as total_atualizados,
+    'Empréstimos antigos marcados como ativos' as descricao
+FROM emprestimos 
+WHERE status = 'ativo' 
+  AND DATE(data_retirada) < CURDATE();
+
+-- 4. Ver status atual dos empréstimos
+SELECT 
+    status,
+    COUNT(*) as quantidade,
+    CASE 
+        WHEN status = 'aguardando_retirada' THEN 'Aguardando confirmação do admin'
+        WHEN status = 'ativo' THEN 'Confirmado e ativo'
+        WHEN status = 'pendente_devolucao' THEN 'Aguardando devolução'
+        WHEN status = 'devolvido' THEN 'Já devolvido'
+        ELSE 'Outro status'
+    END as descricao
+FROM emprestimos
+WHERE status IN ('aguardando_retirada', 'ativo', 'pendente_devolucao')
+GROUP BY status
+ORDER BY 
+    CASE status 
+        WHEN 'aguardando_retirada' THEN 1 
+        WHEN 'ativo' THEN 2 
+        WHEN 'pendente_devolucao' THEN 3 
+    END;
+
+-- 5. (OPCIONAL) Ver detalhes dos empréstimos aguardando retirada
+SELECT 
+    e.id,
+    l.title as livro,
+    u.nome as usuario,
+    e.status,
+    DATE_FORMAT(e.data_retirada, '%d/%m/%Y') as data_solicitacao,
+    DATEDIFF(CURDATE(), e.data_retirada) as dias_desde_solicitacao
+FROM emprestimos e
+JOIN livros l ON e.bookId = l.id
+JOIN usuarios u ON e.cpf = u.cpf
+WHERE e.status = 'aguardando_retirada'
+ORDER BY e.data_retirada DESC;
+
+
+
+
+
+
+
+
+
+
+
+
+-- ==========================================
+-- SCRIPT PARA LIMPAR E CORRIGIR EMPRÉSTIMOS
+-- Execute este SQL no MySQL
+-- ==========================================
+
+-- 1. Ver situação atual dos empréstimos
+SELECT 
+    l.title as livro,
+    u.nome as usuario,
+    e.status,
+    DATE_FORMAT(e.data_retirada, '%d/%m/%Y %H:%i') as data_solicitacao,
+    CASE 
+        WHEN e.status = 'aguardando_retirada' THEN 'Aguardando admin confirmar'
+        WHEN e.status = 'ativo' THEN 'Confirmado e em posse do usuário'
+        ELSE e.status
+    END as descricao
+FROM emprestimos e
+JOIN livros l ON e.bookId = l.id
+JOIN usuarios u ON e.cpf = u.cpf
+WHERE e.status IN ('aguardando_retirada', 'ativo')
+ORDER BY e.data_retirada DESC;
+
+-- 2. Identificar livros com múltiplos empréstimos ativos (PROBLEMA!)
+SELECT 
+    bookId,
+    COUNT(*) as total_emprestimos,
+    GROUP_CONCAT(CONCAT(status, ' (', cpf, ')') SEPARATOR ', ') as detalhes
+FROM emprestimos
+WHERE status IN ('aguardando_retirada', 'ativo')
+GROUP BY bookId
+HAVING COUNT(*) > 1;
+
+-- 3. CORREÇÃO: Remover empréstimos duplicados
+-- Mantém apenas o mais recente de cada livro
+DELETE e1 FROM emprestimos e1
+INNER JOIN emprestimos e2 
+WHERE e1.bookId = e2.bookId 
+  AND e1.id < e2.id
+  AND e1.status IN ('aguardando_retirada', 'ativo')
+  AND e2.status IN ('aguardando_retirada', 'ativo');
+
+-- 4. (OPCIONAL) Se quiser manter apenas empréstimos "aguardando_retirada" recentes
+-- e converter ativos antigos para devolvidos:
+UPDATE emprestimos 
+SET status = 'devolvido', 
+    data_real_devolucao = CURDATE()
+WHERE status = 'ativo' 
+  AND DATE(data_retirada) < CURDATE() - INTERVAL 1 DAY;
+
+-- 5. Verificar resultado final
+SELECT 
+    COUNT(*) as total,
+    status,
+    CASE 
+        WHEN status = 'aguardando_retirada' THEN '🕐 Precisa confirmar retirada'
+        WHEN status = 'ativo' THEN '✓ Confirmado e ativo'
+        WHEN status = 'devolvido' THEN '📚 Já devolvido'
+        ELSE status
+    END as descricao
+FROM emprestimos
+WHERE status IN ('aguardando_retirada', 'ativo', 'devolvido')
+GROUP BY status;
+
+-- 6. Testar disponibilidade dos livros
+SELECT 
+    l.id,
+    l.title,
+    CASE 
+        WHEN e.id IS NOT NULL AND e.status = 'ativo' THEN 'Indisponível (emprestado)'
+        WHEN e.id IS NOT NULL AND e.status = 'aguardando_retirada' THEN 'Disponível (aguardando confirmação)'
+        ELSE 'Disponível'
+    END as status_livro,
+    e.cpf as emprestado_para
+FROM livros l
+LEFT JOIN emprestimos e ON l.id = e.bookId 
+  AND e.status IN ('ativo', 'aguardando_retirada')
+ORDER BY l.title
+LIMIT 20;
+
+-- ==========================================
+-- VERIFICAR ESTADO ATUAL DOS EMPRÉSTIMOS
+-- ==========================================
+
+-- 1. Ver todos os empréstimos ativos e aguardando
+SELECT 
+    e.id,
+    l.title as livro,
+    u.nome as usuario,
+    e.cpf,
+    e.status,
+    DATE_FORMAT(e.data_retirada, '%d/%m/%Y %H:%i') as quando_solicitou,
+    DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as deve_devolver
+FROM emprestimos e
+JOIN livros l ON e.bookId = l.id
+JOIN usuarios u ON e.cpf = u.cpf
+WHERE e.status IN ('aguardando_retirada', 'ativo')
+ORDER BY 
+    CASE e.status 
+        WHEN 'aguardando_retirada' THEN 1
+        WHEN 'ativo' THEN 2
+    END,
+    e.data_retirada DESC;
+
+-- 2. Contar por status
+SELECT 
+    status,
+    COUNT(*) as quantidade
+FROM emprestimos
+WHERE status IN ('aguardando_retirada', 'ativo', 'pendente_devolucao', 'devolvido')
+GROUP BY status;
+
+-- 3. Se não tiver nenhum "aguardando_retirada", vamos criar um teste
+-- APENAS PARA TESTE - Crie um empréstimo aguardando retirada
+-- Substitua os valores abaixo pelos seus dados reais:
+
+/*
+INSERT INTO emprestimos (bookId, cpf, data_retirada, data_prevista_devolucao, status)
+VALUES (
+    1,  -- ID de um livro que existe
+    '12345678901',  -- CPF de um usuário que existe
+    NOW(),
+    DATE_ADD(NOW(), INTERVAL 14 DAY),
+    'aguardando_retirada'
+);
+*/
+
+-- 4. Verificar se o enum está correto
+SHOW COLUMNS FROM emprestimos LIKE 'status';
+
+-- 5. Se precisar atualizar um empréstimo ativo para aguardando (para teste)
+-- Descomente a linha abaixo e ajuste o ID:
+-- UPDATE emprestimos SET status = 'aguardando_retirada' WHERE id = 1;
