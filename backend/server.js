@@ -492,67 +492,62 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/books', async (req, res) => {
     console.log('=== DEBUG: Requisição para /api/books recebida ===');
-    console.log('Headers:', req.headers);
-    console.log('Session:', req.session);
     
     let connection;
     try {
-        console.log('Tentando obter conexão do pool...');
         connection = await pool.getConnection();
-        console.log('Conexão obtida com sucesso');
         
-        console.log('Executando query para buscar livros...');
-        
-        // Query para buscar livros com informações de empréstimos e reviews
         const [rows] = await connection.execute(`
             SELECT 
                 l.*,
                 CASE 
-    WHEN e.id IS NOT NULL AND e.status = 'ativo' THEN false
-    ELSE true 
-END as available,
+                    WHEN e.id IS NOT NULL AND e.status = 'ativo' THEN false
+                    ELSE true 
+                END as available,
                 e.cpf as emprestadoPara,
                 e.data_prevista_devolucao as returnDate,
                 COUNT(r.id) as reviewCount,
                 AVG(r.rating) as avgRating
             FROM livros l
             LEFT JOIN emprestimos e ON l.id = e.bookId AND e.status = 'ativo'
-            LEFT JOIN resenhas r ON l.id = r.bookId
+            LEFT JOIN resenhas r ON l.id = r.id
             GROUP BY l.id, e.id, e.cpf, e.data_prevista_devolucao
             ORDER BY l.title
         `);
         
         console.log('Query executada, livros encontrados:', rows.length);
-        console.log('Primeiros 3 livros:', rows.slice(0, 3));
         
         // Processar os dados para o formato esperado pelo frontend
         const processedBooks = rows.map(book => ({
             ...book,
-            available: book.available === 'true',
+            available: book.available === 1 || book.available === true || book.available === 'true',
             reviewCount: parseInt(book.reviewCount) || 0,
             avgRating: book.avgRating ? parseFloat(book.avgRating) : null
         }));
         
+        console.log('Primeiros 3 livros processados:', processedBooks.slice(0, 3).map(b => ({
+            id: b.id,
+            title: b.title,
+            available: b.available
+        })));
+        
         res.json(processedBooks);
     } catch (error) {
-        console.error('=== ERRO DETALHADO NA ROTA /api/books ===');
-        console.error('Mensagem do erro:', error.message);
-        console.error('Stack do erro:', error.stack);
-        console.error('Código do erro:', error.code);
-        console.error('SQL State:', error.sqlState);
+        console.error('=== ERRO NA ROTA /api/books ===');
+        console.error('Mensagem:', error.message);
+        console.error('Stack:', error.stack);
         res.status(500).json({ 
             error: 'Erro interno do servidor',
             details: error.message 
         });
     } finally {
         if (connection) {
-            console.log('Liberando conexão...');
             connection.release();
         }
     }
 });
 
-// Nova rota para buscar detalhes específicos de um livro
+
 app.get('/api/books/:id', async (req, res) => {
     const { id } = req.params;
     
@@ -560,7 +555,7 @@ app.get('/api/books/:id', async (req, res) => {
     try {
         connection = await pool.getConnection();
         
-        // Buscar livro com informações de empréstimo
+        // Buscar livro - APENAS status "ativo" torna indisponível
         const [bookRows] = await connection.execute(`
             SELECT 
                 l.*,
@@ -580,6 +575,7 @@ app.get('/api/books/:id', async (req, res) => {
         }
         
         const book = bookRows[0];
+        book.available = book.available === 1 || book.available === true;
         
         // Buscar fila de espera do livro
         const [queueRows] = await connection.execute(`
@@ -600,6 +596,7 @@ app.get('/api/books/:id', async (req, res) => {
     }
 });
 
+
 // ================================
 // ROTAS DE EMPRÉSTIMO
 // ================================
@@ -617,20 +614,20 @@ app.post('/api/loan/request', isAuthenticated, async (req, res) => {
         connection = await pool.getConnection();
         await connection.beginTransaction();
         
-        // VERIFICAR LIMITE DE 3 EMPRÉSTIMOS ATIVOS
+        // Verificar limite de 3 empréstimos ativos
         const [activeLoans] = await connection.execute(
-            'SELECT COUNT(*) as total FROM emprestimos WHERE cpf = ? AND status = "ativo"',
+            'SELECT COUNT(*) as total FROM emprestimos WHERE cpf = ? AND status IN ("ativo", "aguardando_retirada")',
             [userCpf]
         );
         
         if (activeLoans[0].total >= 3) {
             await connection.rollback();
             return res.status(400).json({ 
-                error: 'Você atingiu o limite de 3 empréstimos simultâneos. Devolva um livro para emprestar outro.' 
+                error: 'Você atingiu o limite de 3 empréstimos simultâneos.' 
             });
         }
         
-        // Verificar se o livro existe e está disponível
+        // Verificar se o livro existe
         const [bookRows] = await connection.execute(
             'SELECT * FROM livros WHERE id = ?', 
             [bookId]
@@ -641,44 +638,90 @@ app.post('/api/loan/request', isAuthenticated, async (req, res) => {
             return res.status(404).json({ error: 'Livro não encontrado' });
         }
         
-        // Verificar se já existe empréstimo ativo para este livro
+        // Verificar se já existe empréstimo ativo
         const [existingLoans] = await connection.execute(
-            'SELECT * FROM emprestimos WHERE bookId = ? AND status = "ativo"', 
+            'SELECT * FROM emprestimos WHERE bookId = ? AND status IN ("ativo", "aguardando_retirada")', 
             [bookId]
         );
         
         if (existingLoans.length > 0) {
             await connection.rollback();
-            return res.status(400).json({ error: 'Livro já está emprestado' });
+            return res.status(400).json({ 
+                error: 'Livro já está emprestado ou aguardando retirada' 
+            });
         }
         
-        // Verificar se o usuário já tem este livro emprestado
-        const [userActiveLoans] = await connection.execute(
-            'SELECT * FROM emprestimos WHERE cpf = ? AND bookId = ? AND status = "ativo"', 
-            [userCpf, bookId]
-        );
-        
-        if (userActiveLoans.length > 0) {
-            await connection.rollback();
-            return res.status(400).json({ error: 'Você já tem este livro emprestado' });
-        }
-        
-        // Criar empréstimo
+        // Criar empréstimo com status "aguardando_retirada"
         const dataRetirada = new Date();
         const dataPrevisaDevolucao = new Date();
-        dataPrevisaDevolucao.setDate(dataRetirada.getDate() + 14); // 14 dias
+        dataPrevisaDevolucao.setDate(dataRetirada.getDate() + 14);
         
         await connection.execute(`
             INSERT INTO emprestimos (bookId, cpf, data_retirada, data_prevista_devolucao, status) 
-            VALUES (?, ?, ?, ?, 'ativo')
+            VALUES (?, ?, ?, ?, 'aguardando_retirada')
         `, [bookId, userCpf, dataRetirada, dataPrevisaDevolucao]);
         
         await connection.commit();
-        res.status(200).json({ message: 'Empréstimo realizado com sucesso!' });
+        res.status(200).json({ 
+            message: 'Empréstimo solicitado! Aguardando retirada na biblioteca.' 
+        });
         
     } catch (error) {
         if (connection) await connection.rollback();
         console.error('Erro ao solicitar empréstimo:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Adicione esta nova rota no server.js:
+app.post('/api/admin/confirm-pickup', isAuthenticated, isAdmin, async (req, res) => {
+    const { bookId, cpf } = req.body;
+    
+    console.log('=== CONFIRMANDO RETIRADA ===');
+    console.log('BookId:', bookId, 'CPF:', cpf);
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+        
+        // Buscar empréstimo aguardando retirada
+        const [emprestimo] = await connection.execute(
+            'SELECT * FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
+            [bookId, cpf]
+        );
+        
+        if (emprestimo.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ 
+                error: 'Empréstimo aguardando retirada não encontrado' 
+            });
+        }
+        
+        // Atualizar status para "ativo"
+        await connection.execute(
+            'UPDATE emprestimos SET status = "ativo" WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
+            [bookId, cpf]
+        );
+        
+        // Criar notificação para o usuário
+        await connection.execute(
+            `INSERT INTO notificacoes (cpf, tipo, titulo, mensagem) 
+             VALUES (?, 'emprestimo', 'Retirada Confirmada ✓', 
+                     'Sua retirada foi confirmada. Aproveite a leitura! Devolva até o prazo.')`,
+            [cpf]
+        );
+        
+        console.log('✅ Retirada confirmada - Status atualizado para ativo');
+        
+        await connection.commit();
+        res.json({ message: 'Retirada confirmada com sucesso!' });
+        
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('Erro ao confirmar retirada:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
@@ -1059,55 +1102,6 @@ app.delete('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
         
     } catch (error) {
         console.error('Erro ao excluir resenha:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
-
-// ================================
-// CORREÇÃO: Confirmar retirada (Admin)
-// ================================
-app.post('/api/admin/confirm-pickup', isAuthenticated, isAdmin, async (req, res) => {
-    const { bookId, cpf } = req.body;
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // Verificar se existe reserva ou empréstimo pendente
-        const [reserva] = await connection.execute(
-            'SELECT * FROM reservas WHERE bookId = ? AND cpf = ? AND status = "notificado"',
-            [bookId, cpf]
-        );
-        
-        if (reserva.length > 0) {
-            // Marcar reserva como concluída e criar empréstimo
-            await connection.beginTransaction();
-            
-            const dataRetirada = new Date();
-            const dataPrevisaDevolucao = new Date();
-            dataPrevisaDevolucao.setDate(dataRetirada.getDate() + 14);
-            
-            await connection.execute(`
-                INSERT INTO emprestimos (bookId, cpf, data_retirada, data_prevista_devolucao, status) 
-                VALUES (?, ?, ?, ?, 'ativo')
-            `, [bookId, cpf, dataRetirada, dataPrevisaDevolucao]);
-            
-            await connection.execute(
-                'UPDATE reservas SET status = "expirado" WHERE bookId = ? AND cpf = ?',
-                [bookId, cpf]
-            );
-            
-            await connection.commit();
-            res.json({ message: 'Retirada confirmada e empréstimo criado!' });
-        } else {
-            res.status(404).json({ error: 'Reserva não encontrada' });
-        }
-        
-    } catch (error) {
-        if (connection) await connection.rollback();
-        console.error('Erro ao confirmar retirada:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
@@ -1560,36 +1554,67 @@ app.get('/api/admin/dashboard', isAuthenticated, isAdmin, async (req, res) => {
     try {
         connection = await pool.getConnection();
         
+        console.log('=== CARREGANDO DASHBOARD ADMIN ===');
+        
         // Estatísticas gerais
         const [stats] = await connection.execute(`
             SELECT 
                 (SELECT COUNT(*) FROM usuarios) as total_usuarios,
                 (SELECT COUNT(*) FROM livros) as total_livros,
-                (SELECT COUNT(*) FROM emprestimos WHERE status = 'ativo') as emprestimos_ativos,
+                (SELECT COUNT(*) FROM emprestimos WHERE status IN ('ativo', 'aguardando_retirada')) as emprestimos_ativos,
                 (SELECT COUNT(*) FROM emprestimos WHERE status = 'pendente_devolucao') as devolucoes_pendentes
         `);
         
-        // Empréstimos ativos detalhados
+        console.log('Stats:', stats[0]);
+        
+        // Empréstimos ativos E aguardando retirada
         const [emprestimos_ativos] = await connection.execute(`
-            SELECT e.*, l.title, u.nome as user_name,
-                   DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as data_devolucao_formatada,
-                   DATEDIFF(CURDATE(), e.data_prevista_devolucao) as dias_atraso
+            SELECT 
+                e.*,
+                l.title,
+                l.author,
+                u.nome as user_name,
+                DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as data_devolucao_formatada,
+                DATE_FORMAT(e.data_retirada, '%d/%m/%Y %H:%i') as data_solicitacao_formatada,
+                DATEDIFF(CURDATE(), e.data_prevista_devolucao) as dias_atraso
             FROM emprestimos e
             JOIN livros l ON e.bookId = l.id
             JOIN usuarios u ON e.cpf = u.cpf
-            WHERE e.status = 'ativo'
-            ORDER BY e.data_prevista_devolucao ASC
+            WHERE e.status IN ('ativo', 'aguardando_retirada')
+            ORDER BY 
+                CASE e.status 
+                    WHEN 'aguardando_retirada' THEN 1 
+                    WHEN 'ativo' THEN 2 
+                END,
+                e.data_retirada DESC
         `);
+        
+        console.log('Empréstimos ativos encontrados:', emprestimos_ativos.length);
+        console.log('Aguardando retirada:', emprestimos_ativos.filter(e => e.status === 'aguardando_retirada').length);
+        console.log('Ativos:', emprestimos_ativos.filter(e => e.status === 'ativo').length);
+        
+        // Log detalhado dos aguardando retirada
+        const aguardando = emprestimos_ativos.filter(e => e.status === 'aguardando_retirada');
+        aguardando.forEach(emp => {
+            console.log(`- ${emp.title} para ${emp.user_name} (CPF: ${emp.cpf})`);
+        });
         
         // Devoluções pendentes
         const [devolucoes_pendentes] = await connection.execute(`
-            SELECT e.*, l.title, u.nome as user_name
+            SELECT 
+                e.*,
+                l.title,
+                l.author,
+                u.nome as user_name,
+                DATE_FORMAT(e.data_real_devolucao, '%d/%m/%Y') as data_devolucao_solicitada
             FROM emprestimos e
             JOIN livros l ON e.bookId = l.id
             JOIN usuarios u ON e.cpf = u.cpf
             WHERE e.status = 'pendente_devolucao'
             ORDER BY e.data_real_devolucao ASC
         `);
+        
+        console.log('Devoluções pendentes:', devolucoes_pendentes.length);
         
         res.json({
             stats: stats[0],
@@ -1598,8 +1623,47 @@ app.get('/api/admin/dashboard', isAuthenticated, isAdmin, async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Erro ao buscar dashboard admin:', error);
+        console.error('=== ERRO NO DASHBOARD ADMIN ===');
+        console.error('Mensagem:', error.message);
+        console.error('Stack:', error.stack);
         res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+
+app.get('/api/admin/debug-emprestimos', isAuthenticated, isAdmin, async (req, res) => {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        const [todos] = await connection.execute(`
+            SELECT 
+                e.id,
+                e.bookId,
+                l.title,
+                e.cpf,
+                u.nome,
+                e.status,
+                DATE_FORMAT(e.data_retirada, '%d/%m/%Y %H:%i') as data_retirada
+            FROM emprestimos e
+            JOIN livros l ON e.bookId = l.id
+            JOIN usuarios u ON e.cpf = u.cpf
+            WHERE e.status IN ('aguardando_retirada', 'ativo')
+            ORDER BY e.data_retirada DESC
+        `);
+        
+        res.json({
+            total: todos.length,
+            aguardando_retirada: todos.filter(e => e.status === 'aguardando_retirada'),
+            ativos: todos.filter(e => e.status === 'ativo'),
+            todos
+        });
+        
+    } catch (error) {
+        console.error('Erro no debug:', error);
+        res.status(500).json({ error: error.message });
     } finally {
         if (connection) connection.release();
     }
@@ -1784,40 +1848,52 @@ app.get('/api/admin/report', isAuthenticated, isAdmin, async (req, res) => {
     }
 });
 
+// ROTA DE TESTE - ADICIONE ISSO
+app.post('/api/admin/test-route', (req, res) => {
+    console.log('ROTA DE TESTE FUNCIONOU!');
+    res.json({ message: 'Rota funcionando!' });
+});
+
 // Confirmar retirada de livro
 app.post('/api/admin/confirm-pickup', isAuthenticated, isAdmin, async (req, res) => {
     const { bookId, cpf } = req.body;
     
-    // O status no banco de dados para o livro que está "Aguardando Retirada"
-    const STATUS_AGUARDANDO = "aguardando_retirada"; 
+    console.log('=== CONFIRMANDO RETIRADA ===');
+    console.log('BookId:', bookId, 'CPF:', cpf);
     
     let connection;
     try {
         connection = await pool.getConnection();
         await connection.beginTransaction();
         
-        // Verificar se existe empréstimo no status correto
+        // Buscar empréstimo aguardando retirada
         const [emprestimo] = await connection.execute(
-            'SELECT * FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = ?', 
-            [bookId, cpf, STATUS_AGUARDANDO]
+            'SELECT * FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
+            [bookId, cpf]
         );
         
         if (emprestimo.length === 0) {
             await connection.rollback();
-            return res.status(404).json({ error: 'Reserva para retirada não encontrada' }); 
+            return res.status(404).json({ 
+                error: 'Empréstimo aguardando retirada não encontrado' 
+            });
         }
         
-        // Atualizar data de retirada e mudar status para "ativo"
+        // Atualizar status para "ativo"
         await connection.execute(
-            'UPDATE emprestimos SET data_retirada = CURDATE(), status = "ativo" WHERE bookId = ? AND cpf = ? AND status = ?', 
-            [bookId, cpf, STATUS_AGUARDANDO]
+            'UPDATE emprestimos SET status = "ativo" WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
+            [bookId, cpf]
         );
         
-        // Criar notificação para o usuário
+        // Criar notificação
         await connection.execute(
-            'INSERT INTO notificacoes (cpf, tipo, titulo, mensagem) VALUES (?, ?, ?, ?)',
-            [cpf, 'emprestimo', 'Empréstimo Confirmado', 'Sua retirada foi confirmada. Aproveite a leitura!']
+            `INSERT INTO notificacoes (cpf, tipo, titulo, mensagem) 
+             VALUES (?, 'emprestimo', 'Retirada Confirmada ✓', 
+                     'Sua retirada foi confirmada. Aproveite a leitura! Devolva até o prazo.')`,
+            [cpf]
         );
+        
+        console.log('✅ Retirada confirmada - Status atualizado para ativo');
         
         await connection.commit();
         res.json({ message: 'Retirada confirmada com sucesso!' });
@@ -1825,6 +1901,59 @@ app.post('/api/admin/confirm-pickup', isAuthenticated, isAdmin, async (req, res)
     } catch (error) {
         if (connection) await connection.rollback();
         console.error('Erro ao confirmar retirada:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Cancelar empréstimo expirado
+app.post('/api/admin/cancel-expired-loan', isAuthenticated, isAdmin, async (req, res) => {
+    const { bookId, cpf } = req.body;
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+        
+        // Deletar empréstimo
+        const [result] = await connection.execute(
+            'DELETE FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = "ativo"',
+            [bookId, cpf]
+        );
+        
+        if (result.affectedRows === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Empréstimo não encontrado' });
+        }
+        
+        // Verificar próximo na fila
+        const [nextInQueue] = await connection.execute(
+            'SELECT cpf FROM reservas WHERE bookId = ? AND status = "aguardando" ORDER BY posicao ASC LIMIT 1',
+            [bookId]
+        );
+        
+        if (nextInQueue.length > 0) {
+            const nextUserCpf = nextInQueue[0].cpf;
+            
+            // Notificar próximo
+            await connection.execute(
+                'UPDATE reservas SET status = "notificado", data_notificacao = NOW() WHERE bookId = ? AND cpf = ?',
+                [bookId, nextUserCpf]
+            );
+            
+            await connection.execute(
+                'INSERT INTO notificacoes (cpf, tipo, titulo, mensagem) VALUES (?, "reserva", "Livro Disponível!", "O livro que você reservou está disponível.")',
+                [nextUserCpf]
+            );
+        }
+        
+        await connection.commit();
+        res.json({ message: 'Empréstimo cancelado e próximo usuário notificado!' });
+        
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('Erro ao cancelar empréstimo:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();

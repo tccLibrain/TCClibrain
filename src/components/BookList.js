@@ -288,6 +288,21 @@ export async function renderBookList(container) {
         }
     }
 
+    async function checkPendingLoan(bookId, userCpf) {
+        try {
+            const response = await fetch(`http://localhost:3000/api/user/pending-loan/${bookId}`, {
+                credentials: 'include'
+            });
+            if (response.ok) {
+                const data = await response.json();
+                return data.pending;
+            }
+        } catch (error) {
+            console.error('Erro ao verificar empréstimo pendente:', error);
+        }
+        return false;
+    }
+
     // Event listeners para busca
     searchInput.addEventListener('input', doSearch);
     

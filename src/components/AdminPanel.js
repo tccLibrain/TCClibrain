@@ -5,7 +5,7 @@ function createPlaceholderImage(title) {
         <svg width="80" height="120" xmlns="http://www.w3.org/2000/svg">
             <rect width="100%" height="100%" fill="#9dadb7"/>
             <text x="50%" y="50%" font-family="Arial" font-size="10" fill="#ffffff" 
-                  text-anchor="middle" dominant-baseline="middle">${title?.substring(0, 6) || 'Livro'}</text>
+                text-anchor="middle" dominant-baseline="middle">${title?.substring(0, 6) || 'Livro'}</text>
         </svg>
     `)}`;
 }
@@ -65,12 +65,15 @@ export async function renderAdminPanel(container) {
 function renderAdminContent(container, currentUser, dashboardData, allBooks) {
     const { stats, emprestimos_ativos, devolucoes_pendentes } = dashboardData;
     
-    // Verificar empréstimos expirados (mais de 3 dias sem confirmação)
-    const emprestimosExpirados = emprestimos_ativos.filter(emp => {
-        const dataRetirada = new Date(emp.data_retirada);
-        const diasDesdeRetirada = Math.floor((new Date() - dataRetirada) / (1000 * 60 * 60 * 24));
-        return diasDesdeRetirada > 3;
-    });
+    // Separar empréstimos aguardando retirada dos ativos
+    const aguardandoRetirada = emprestimos_ativos.filter(emp => emp.status === 'aguardando_retirada');
+    const emprestimosAtivos = emprestimos_ativos.filter(emp => emp.status === 'ativo');
+    
+    console.log('=== DEBUG ADMIN ===');
+    console.log('Total empréstimos:', emprestimos_ativos.length);
+    console.log('Aguardando retirada:', aguardandoRetirada.length);
+    console.log('Ativos:', emprestimosAtivos.length);
+    console.log('Empréstimos aguardando:', aguardandoRetirada);
     
     container.innerHTML = `
         <style>
@@ -180,6 +183,13 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 background: var(--cinza-claro);
             }
             
+            .empty-state {
+                text-align: center;
+                padding: 40px;
+                color: var(--azul-claro);
+                font-style: italic;
+            }
+            
             .item-info {
                 flex: 1;
             }
@@ -219,11 +229,6 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 color: #856404;
             }
             
-            .status-expired {
-                background: #f8d7da;
-                color: #721c24;
-            }
-            
             .item-actions {
                 display: flex;
                 gap: 8px;
@@ -255,15 +260,6 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             
             .btn-confirm:hover {
                 background-color: #0056b3;
-            }
-            
-            .btn-cancel {
-                background-color: #dc3545;
-                color: white;
-            }
-            
-            .btn-cancel:hover {
-                background-color: #c82333;
             }
             
             .btn-view {
@@ -360,17 +356,17 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
 
             <div class="admin-section">
                 <div class="section-tabs">
-                    <button class="tab-btn active" data-tab="devolucoes">
+                    ${aguardandoRetirada.length > 0 ? `
+                        <button class="tab-btn active" data-tab="aguardando">
+                            🕐 Aguardando Retirada (${aguardandoRetirada.length})
+                        </button>
+                    ` : ''}
+                    <button class="tab-btn ${aguardandoRetirada.length === 0 ? 'active' : ''}" data-tab="devolucoes">
                         Devoluções Pendentes (${devolucoes_pendentes.length})
                     </button>
                     <button class="tab-btn" data-tab="emprestimos">
-                        Empréstimos Ativos (${emprestimos_ativos.length})
+                        Empréstimos Ativos (${emprestimosAtivos.length})
                     </button>
-                    ${emprestimosExpirados.length > 0 ? `
-                        <button class="tab-btn" data-tab="expirados">
-                            ⚠️ Expirados (${emprestimosExpirados.length})
-                        </button>
-                    ` : ''}
                     <button class="tab-btn" data-tab="catalogo">
                         Catálogo (${allBooks.length})
                     </button>
@@ -382,7 +378,41 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                     </button>
                 </div>
 
-                <div id="devolucoes" class="tab-content active">
+                ${aguardandoRetirada.length > 0 ? `
+                    <div id="aguardando" class="tab-content active">
+                        <h2>Empréstimos Aguardando Retirada</h2>
+                        <p style="color: #856404; padding: 10px; background: #fff3cd; border-radius: 6px; margin-bottom: 15px;">
+                            📋 Estes usuários solicitaram empréstimos. Confirme quando retirarem o livro.
+                        </p>
+                        <ul class="admin-list">
+                            ${aguardandoRetirada.map(emp => `
+                                <li>
+                                    <div class="item-info">
+                                        <div class="item-title">${emp.title || 'Livro ID: ' + emp.bookId}</div>
+                                        <div class="item-subtitle">
+                                            Para: ${emp.user_name || emp.cpf}<br>
+                                            Devolução prevista: ${emp.data_devolucao_formatada || 'Não informada'}
+                                        </div>
+                                        <span class="item-status status-pending">🕐 Aguardando Retirada</span>
+                                    </div>
+                                    <div class="item-actions">
+                                        <button class="btn-small btn-confirm" 
+                                                data-bookid="${emp.bookId}"
+                                                data-cpf="${emp.cpf}">
+                                            ✓ Confirmar Retirada
+                                        </button>
+                                        <button class="btn-small btn-view" 
+                                                data-bookid="${emp.bookId}">
+                                            👁 Ver Detalhes
+                                        </button>
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+
+                <div id="devolucoes" class="tab-content ${aguardandoRetirada.length === 0 ? 'active' : ''}">
                     <h2>Devoluções Aguardando Aprovação</h2>
                     <ul class="admin-list">
                         ${devolucoes_pendentes.length > 0 ? 
@@ -416,79 +446,31 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 <div id="emprestimos" class="tab-content">
                     <h2>Empréstimos Ativos</h2>
                     <ul class="admin-list">
-                        ${emprestimos_ativos.length > 0 ? 
-                            emprestimos_ativos.map(emp => {
-                                const dataRetirada = new Date(emp.data_retirada);
-                                const diasDesdeRetirada = Math.floor((new Date() - dataRetirada) / (1000 * 60 * 60 * 24));
-                                const precisaConfirmacao = diasDesdeRetirada === 0;
-                                
-                                return `
-                                    <li>
-                                        <div class="item-info">
-                                            <div class="item-title">${emp.title || 'Livro ID: ' + emp.bookId}</div>
-                                            <div class="item-subtitle">
-                                                Emprestado para: ${emp.user_name || emp.cpf}<br>
-                                                Devolução prevista: ${emp.data_devolucao_formatada || 'Não informada'}
-                                            </div>
-                                            <span class="item-status ${emp.dias_atraso > 0 ? 'status-overdue' : (precisaConfirmacao ? 'status-pending' : 'status-active')}">
-                                                ${emp.dias_atraso > 0 ? `${emp.dias_atraso} dias de atraso` : (precisaConfirmacao ? 'Aguardando Retirada' : 'Em dia')}
-                                            </span>
-                                        </div>
-                                        <div class="item-actions">
-                                            ${precisaConfirmacao ? `
-                                                <button class="btn-small btn-confirm" 
-                                                        data-bookid="${emp.bookId}"
-                                                        data-cpf="${emp.cpf}">
-                                                    ✓ Confirmar Retirada
-                                                </button>
-                                            ` : ''}
-                                            <button class="btn-small btn-view" 
-                                                    data-bookid="${emp.bookId}">
-                                                👁 Ver Detalhes
-                                            </button>
-                                        </div>
-                                    </li>
-                                `;
-                            }).join('') 
-                            : '<li class="empty-state">Nenhum empréstimo ativo</li>'
-                        }
-                    </ul>
-                </div>
-
-                ${emprestimosExpirados.length > 0 ? `
-                    <div id="expirados" class="tab-content">
-                        <h2>Empréstimos Expirados (Não Retirados)</h2>
-                        <p style="color: #856404; padding: 10px; background: #fff3cd; border-radius: 6px; margin-bottom: 15px;">
-                            ⚠️ Estes empréstimos não foram confirmados há mais de 3 dias. Considere cancelá-los.
-                        </p>
-                        <ul class="admin-list">
-                            ${emprestimosExpirados.map(emp => `
+                        ${emprestimosAtivos.length > 0 ? 
+                            emprestimosAtivos.map(emp => `
                                 <li>
                                     <div class="item-info">
                                         <div class="item-title">${emp.title || 'Livro ID: ' + emp.bookId}</div>
                                         <div class="item-subtitle">
-                                            Para: ${emp.user_name || emp.cpf}<br>
-                                            Solicitado há ${Math.floor((new Date() - new Date(emp.data_retirada)) / (1000 * 60 * 60 * 24))} dias
+                                            Emprestado para: ${emp.user_name || emp.cpf}<br>
+                                            Devolução prevista: ${emp.data_devolucao_formatada || 'Não informada'}
                                         </div>
-                                        <span class="item-status status-expired">Expirado</span>
+                                        <span class="item-status ${emp.dias_atraso > 0 ? 'status-overdue' : 'status-active'}">
+                                            ${emp.dias_atraso > 0 ? `⚠️ ${emp.dias_atraso} dias de atraso` : '✓ Empréstimo Ativo'}
+                                        </span>
                                     </div>
                                     <div class="item-actions">
-                                        <button class="btn-small btn-confirm" 
-                                                data-bookid="${emp.bookId}"
-                                                data-cpf="${emp.cpf}">
-                                            ✓ Confirmar Retirada
-                                        </button>
-                                        <button class="btn-small btn-cancel" 
-                                                data-bookid="${emp.bookId}"
-                                                data-cpf="${emp.cpf}">
-                                            ✖ Cancelar Empréstimo
+                                        <button class="btn-small btn-view" 
+                                                data-bookid="${emp.bookId}">
+                                            👁 Ver Detalhes
                                         </button>
                                     </div>
                                 </li>
-                            `).join('')}
-                        </ul>
-                    </div>
-                ` : ''}
+                            `).join('') 
+                            : '<li class="empty-state">Nenhum empréstimo ativo</li>'
+                        }
+                    </ul>
+                </div>
 
                 <div id="catalogo" class="tab-content">
                     <h2>Catálogo Completo de Livros</h2>
@@ -497,9 +479,9 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                         ${allBooks.map(book => `
                             <div class="book-card-admin" data-bookid="${book.id}" style="background: var(--cinza-claro); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: transform 0.3s ease;">
                                 <img src="${book.cover || createPlaceholderImage(book.title)}" 
-                                     alt="${book.title}"
-                                     style="width: 80px; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;"
-                                     onerror="this.src='${createPlaceholderImage('Erro')}'">
+                                    alt="${book.title}"
+                                    style="width: 80px; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;"
+                                    onerror="this.src='${createPlaceholderImage('Erro')}'">
                                 <div class="book-title" style="font-size: 11px; font-weight: bold; color: var(--azul-escuro); margin-bottom: 4px; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${book.title || 'Título não disponível'}</div>
                                 <div class="book-author" style="font-size: 10px; color: var(--azul-claro); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;">${book.author || 'Autor desconhecido'}</div>
                                 <span class="book-status-badge ${book.available !== false ? 'available' : 'borrowed'}" style="font-size: 9px; padding: 2px 6px; border-radius: 8px; margin-top: 4px; display: inline-block; ${book.available !== false ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}">
@@ -632,6 +614,8 @@ function setupAdminEventListeners(container, allBooks) {
             if (!confirm('Confirmar que o usuário retirou o livro?')) return;
 
             try {
+                console.log('Enviando confirmação:', { bookId, cpf });
+                
                 const response = await fetch('http://localhost:3000/api/admin/confirm-pickup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -649,35 +633,6 @@ function setupAdminEventListeners(container, allBooks) {
                 }
             } catch (error) {
                 console.error('Erro ao confirmar retirada:', error);
-                alert('Erro de conexão.');
-            }
-        }
-
-        // Cancelar empréstimo expirado
-        if (e.target.classList.contains('btn-cancel')) {
-            const bookId = e.target.dataset.bookid;
-            const cpf = e.target.dataset.cpf;
-
-            if (!confirm('Cancelar este empréstimo e notificar o próximo da fila?')) return;
-
-            try {
-                const response = await fetch('http://localhost:3000/api/admin/cancel-expired-loan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ bookId: parseInt(bookId), cpf })
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    alert(result.message || 'Empréstimo cancelado!');
-                    renderAdminPanel(container);
-                } else {
-                    const error = await response.json();
-                    alert(`Erro: ${error.error || 'Erro desconhecido'}`);
-                }
-            } catch (error) {
-                console.error('Erro ao cancelar empréstimo:', error);
                 alert('Erro de conexão.');
             }
         }
