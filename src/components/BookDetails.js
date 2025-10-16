@@ -99,7 +99,51 @@ export async function renderBookDetails(container, bookId) {
             const isLoanedToUser = book.emprestadoPara === currentUser.cpf;
             const isUserInQueue = book.queue && book.queue.includes(currentUser.cpf);
             
-            if (isLoanedToUser) {
+            // NOVO: Verificar se tem solicitação aguardando
+            let hasPendingRequest = false;
+            let hasPendingReturn = false;
+            
+            try {
+                const dashboardResponse = await fetch('http://localhost:3000/api/user/dashboard', {
+                    credentials: 'include'
+                });
+                if (dashboardResponse.ok) {
+                    const dashboardData = await dashboardResponse.json();
+                    
+                    // Verificar empréstimos aguardando retirada
+                    hasPendingRequest = dashboardData.emprestados?.some(
+                        emp => emp.bookId === parseInt(validBookId) && emp.status === 'aguardando_retirada'
+                    );
+                    
+                    // Verificar devoluções pendentes
+                    hasPendingReturn = dashboardData.devolucoesPendentes?.some(
+                        dev => dev.bookId === parseInt(validBookId)
+                    );
+                }
+            } catch (error) {
+                console.log('Erro ao verificar status:', error);
+            }
+            
+            if (hasPendingRequest) {
+                actionButtonHtml = `
+                    <div class="status-aguardando">
+                        <p>⏳ <strong>Aguardando Aprovação</strong></p>
+                        <p style="font-size: 14px; color: #6c757d;">
+                            Seu empréstimo foi solicitado e está aguardando aprovação do bibliotecário.
+                        </p>
+                        <button id="cancelarSolicitacaoBtn" class="btn btn-secondary">Cancelar Solicitação</button>
+                    </div>
+                `;
+            } else if (hasPendingReturn) {
+                actionButtonHtml = `
+                    <div class="status-aguardando">
+                        <p>⏳ <strong>Devolução Aguardando Aprovação</strong></p>
+                        <p style="font-size: 14px; color: #6c757d;">
+                            Sua devolução foi solicitada e está aguardando confirmação do bibliotecário.
+                        </p>
+                    </div>
+                `;
+            } else if (isLoanedToUser) {
                 actionButtonHtml = `
                     <div class="loan-actions">
                         <button id="devolverBtn" class="btn">Solicitar Devolução</button>
@@ -109,7 +153,7 @@ export async function renderBookDetails(container, bookId) {
             } else if (isUserInQueue) {
                 const position = book.queue.indexOf(currentUser.cpf) + 1;
                 actionButtonHtml = `
-                    <p>Você está na posição ${position} da fila</p>
+                    <p>📋 Você está na posição <strong>${position}</strong> da fila</p>
                     <button id="cancelarReservaBtn" class="btn btn-secondary">Cancelar Reserva</button>
                 `;
             } else if (isEmprestado) {
@@ -136,6 +180,11 @@ export async function renderBookDetails(container, bookId) {
                 .loan-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 15px; }
                 .btn-success { background-color: #28a745; color: white; }
                 .btn-success:hover { background-color: #218838; }
+                .btn-secondary { background-color: #6c757d; color: white; }
+                .btn-secondary:hover { background-color: #5a6268; }
+                .status-aguardando { background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); border: 2px solid #ffc107; border-radius: 12px; padding: 20px; margin: 15px 0; text-align: center; }
+                .status-aguardando p { margin: 8px 0; color: #856404; }
+                .status-aguardando strong { font-size: 18px; color: #664d03; }
                 .synopsis-section { background: var(--branco); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
                 .synopsis-section #synopsis { margin-top: 15px; line-height: 1.6; color: var(--azul-claro); }
                 .hidden { display: none; }
@@ -271,6 +320,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
 
     if (!currentUser) return;
 
+    // Sistema de rating
     let selectedRating = 0;
     const ratingStars = container.querySelectorAll('#ratingInput .star');
     
@@ -288,10 +338,13 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
 
     container.querySelector('#ratingInput')?.addEventListener('mouseleave', () => updateStars(selectedRating));
 
+    // Solicitar empréstimo
     const solicitarBtn = container.querySelector('#solicitarBtn');
     if (solicitarBtn) {
         solicitarBtn.addEventListener('click', async () => {
             if (!confirm('Deseja solicitar o empréstimo deste livro?')) return;
+            solicitarBtn.disabled = true;
+            solicitarBtn.textContent = 'Solicitando...';
             try {
                 const res = await fetch('http://localhost:3000/api/loan/request', {
                     method: 'POST',
@@ -304,14 +357,19 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 if (res.ok) renderBookDetails(container, bookId);
             } catch (error) {
                 alert('Erro de conexão.');
+            } finally {
+                solicitarBtn.disabled = false;
+                solicitarBtn.textContent = 'Solicitar Empréstimo';
             }
         });
     }
 
+    // Entrar na fila
     const reservarBtn = container.querySelector('#reservarBtn');
     if (reservarBtn) {
         reservarBtn.addEventListener('click', async () => {
             if (!confirm('Deseja entrar na fila de espera?')) return;
+            reservarBtn.disabled = true;
             try {
                 const res = await fetch('http://localhost:3000/api/loan/reserve', {
                     method: 'POST',
@@ -324,14 +382,19 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 if (res.ok) renderBookDetails(container, bookId);
             } catch (error) {
                 alert('Erro de conexão.');
+            } finally {
+                reservarBtn.disabled = false;
             }
         });
     }
 
+    // Solicitar devolução
     const devolverBtn = container.querySelector('#devolverBtn');
     if (devolverBtn) {
         devolverBtn.addEventListener('click', async () => {
-            if (!confirm('Deseja solicitar a devolução?')) return;
+            if (!confirm('Deseja solicitar a devolução deste livro?')) return;
+            devolverBtn.disabled = true;
+            devolverBtn.textContent = 'Solicitando...';
             try {
                 const res = await fetch('http://localhost:3000/api/loan/request-return', {
                     method: 'POST',
@@ -344,37 +407,75 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 if (res.ok) renderBookDetails(container, bookId);
             } catch (error) {
                 alert('Erro de conexão.');
+            } finally {
+                devolverBtn.disabled = false;
+                devolverBtn.textContent = 'Solicitar Devolução';
             }
         });
     }
     
-    // NOVO: Lógica para o botão "Marcar como Lido"
+    // Marcar como lido
     const marcarLidoBtn = container.querySelector('#marcarLidoBtn');
     if (marcarLidoBtn) {
         marcarLidoBtn.addEventListener('click', async () => {
             if (!confirm('Deseja marcar este livro como lido?')) return;
+            marcarLidoBtn.disabled = true;
             try {
-                // Endpoint assumido para a funcionalidade de marcar como lido
-                const res = await fetch('http://localhost:3000/api/user/mark-as-read', {
+                const res = await fetch('http://localhost:3000/api/loan/mark-read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ bookId: parseInt(bookId), status: 'lido' })
+                });
+                const result = await res.json();
+                alert(result.message || result.error);
+                if (res.ok) setTimeout(() => renderBookDetails(container, bookId), 1000);
+            } catch (error) {
+                alert('Erro de conexão.');
+            } finally {
+                marcarLidoBtn.disabled = false;
+            }
+        });
+    }
+
+    // Cancelar solicitação de empréstimo (NOVO)
+    const cancelarSolicitacaoBtn = container.querySelector('#cancelarSolicitacaoBtn');
+    if (cancelarSolicitacaoBtn) {
+        cancelarSolicitacaoBtn.addEventListener('click', async () => {
+            if (!confirm('Deseja cancelar esta solicitação de empréstimo?')) return;
+            
+            cancelarSolicitacaoBtn.disabled = true;
+            cancelarSolicitacaoBtn.textContent = 'Cancelando...';
+            
+            try {
+                const res = await fetch('http://localhost:3000/api/loan/cancel-request', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
                     body: JSON.stringify({ bookId: parseInt(bookId) })
                 });
+                
                 const result = await res.json();
                 alert(result.message || result.error);
-                if (res.ok) renderBookDetails(container, bookId);
+                
+                if (res.ok) {
+                    renderBookDetails(container, bookId);
+                }
             } catch (error) {
-                alert('Erro de conexão ao marcar como lido.');
+                alert('Erro de conexão.');
+            } finally {
+                cancelarSolicitacaoBtn.disabled = false;
+                cancelarSolicitacaoBtn.textContent = 'Cancelar Solicitação';
             }
         });
     }
-    // FIM NOVO
 
+    // Cancelar reserva
     const cancelarReservaBtn = container.querySelector('#cancelarReservaBtn');
     if (cancelarReservaBtn) {
         cancelarReservaBtn.addEventListener('click', async () => {
             if (!confirm('Deseja cancelar esta reserva?')) return;
+            cancelarReservaBtn.disabled = true;
             try {
                 const res = await fetch('http://localhost:3000/api/loan/cancel-request', {
                     method: 'POST',
@@ -387,10 +488,13 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 if (res.ok) renderBookDetails(container, bookId);
             } catch (error) {
                 alert('Erro de conexão.');
+            } finally {
+                cancelarReservaBtn.disabled = false;
             }
         });
     }
 
+    // Salvar resenha
     const saveBtn = container.querySelector('#saveReviewBtn');
     if (saveBtn) {
         saveBtn.addEventListener('click', async () => {
@@ -399,6 +503,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 alert('Selecione uma classificação em estrelas.');
                 return;
             }
+            saveBtn.disabled = true;
             try {
                 const res = await fetch('http://localhost:3000/api/reviews', {
                     method: 'POST',
@@ -411,83 +516,223 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 if (res.ok) renderBookDetails(container, bookId);
             } catch (error) {
                 alert('Erro de conexão.');
+            } finally {
+                saveBtn.disabled = false;
             }
         });
     }
 
+    // Favoritar
     const favoriteBtn = container.querySelector('#favoriteBtn');
     if (favoriteBtn) {
         favoriteBtn.addEventListener('click', async () => {
             const isFavorited = favoriteBtn.classList.contains('favorited');
+            favoriteBtn.disabled = true;
             try {
-                const res = await fetch(isFavorited ? `http://localhost:3000/api/favorites/${bookId}` : 'http://localhost:3000/api/favorites', {
-                    method: isFavorited ? 'DELETE' : 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: isFavorited ? null : JSON.stringify({ bookId: parseInt(bookId) })
-                });
+                const res = await fetch(
+                    isFavorited ? `http://localhost:3000/api/favorites/${bookId}` : 'http://localhost:3000/api/favorites',
+                    {
+                        method: isFavorited ? 'DELETE' : 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: isFavorited ? null : JSON.stringify({ bookId: parseInt(bookId) })
+                    }
+                );
                 const result = await res.json();
                 alert(result.message || result.error);
                 if (res.ok) renderBookDetails(container, bookId);
             } catch (error) {
-                alert('Erro ao favoritar/desfavoritar.');
+                alert('Erro ao favoritar.');
+            } finally {
+                favoriteBtn.disabled = false;
             }
         });
     }
 
-    container.addEventListener('click', (e) => {
+    // Editar/Excluir resenha
+    container.addEventListener('click', async (e) => {
         if (e.target.classList.contains('deleteReviewBtn')) {
-            const reviewId = e.target.closest('.review-card').dataset.reviewid;
-            if (!confirm('Deseja excluir esta resenha?')) return;
-            fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
-                method: 'DELETE',
-                credentials: 'include'
-            }).then(res => {
+            const reviewCard = e.target.closest('.review-card');
+            const reviewId = reviewCard.dataset.reviewid;
+            if (!reviewId || !confirm('Deseja excluir esta resenha?')) return;
+            
+            e.target.disabled = true;
+            try {
+                const res = await fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
                 if (res.ok) {
                     alert('Resenha excluída!');
                     renderBookDetails(container, bookId);
+                } else {
+                    alert('Erro ao excluir resenha');
                 }
+            } catch (error) {
+                alert('Erro de conexão');
+            } finally {
+                e.target.disabled = false;
+            }
+        }
+        
+        if (e.target.classList.contains('editReviewBtn')) {
+            const reviewCard = e.target.closest('.review-card');
+            const reviewId = reviewCard.dataset.reviewid;
+            if (!reviewId) return;
+            
+            const currentText = reviewCard.querySelector('p').textContent.trim();
+            const currentRating = reviewCard.querySelectorAll('.stars-display .star.filled').length;
+            
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 500px;">
+                    <span class="close-btn">&times;</span>
+                    <h3>Editar Resenha</h3>
+                    <div class="rating-input" id="editRatingInput">
+                        ${[1, 2, 3, 4, 5].map(i => `<span class="star ${i <= currentRating ? 'filled' : ''}" data-value="${i}">★</span>`).join('')}
+                    </div>
+                    <textarea id="editReviewText" rows="4" maxlength="500" 
+                              style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; 
+                              resize: vertical; box-sizing: border-box; margin: 10px 0;">${currentText}</textarea>
+                    <div style="text-align: center;">
+                        <button id="saveEditBtn" class="btn">Salvar</button>
+                        <button id="cancelEditBtn" class="btn-secondary">Cancelar</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            let editRating = currentRating;
+            const editStars = modal.querySelectorAll('#editRatingInput .star');
+            const updateEditStars = (rating) => editStars.forEach((s, i) => s.classList.toggle('filled', i < rating));
+            
+            editStars.forEach(star => {
+                star.addEventListener('click', () => {
+                    editRating = parseInt(star.dataset.value);
+                    updateEditStars(editRating);
+                });
+                star.addEventListener('mouseenter', () => updateEditStars(parseInt(star.dataset.value)));
+            });
+            
+            modal.querySelector('#editRatingInput').addEventListener('mouseleave', () => updateEditStars(editRating));
+            
+            modal.querySelector('#saveEditBtn').addEventListener('click', async () => {
+                const newText = modal.querySelector('#editReviewText').value.trim();
+                if (editRating === 0) {
+                    alert('Selecione uma classificação');
+                    return;
+                }
+                try {
+                    const res = await fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ text: newText, rating: editRating })
+                    });
+                    if (res.ok) {
+                        alert('Resenha atualizada!');
+                        modal.remove();
+                        renderBookDetails(container, bookId);
+                    } else {
+                        alert('Erro ao atualizar resenha');
+                    }
+                } catch (error) {
+                    alert('Erro de conexão');
+                }
+            });
+            
+            modal.querySelector('.close-btn').addEventListener('click', () => modal.remove());
+            modal.querySelector('#cancelEditBtn').addEventListener('click', () => modal.remove());
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
             });
         }
     });
 
+    // Modal de prateleiras
     const modal = container.querySelector('#shelfModal');
     const addShelfBtn = container.querySelector('#addShelfBtn');
     const closeBtn = container.querySelector('.close-btn');
     const shelfList = container.querySelector('#shelfList');
 
-    if (addShelfBtn && modal) {
+    if (addShelfBtn && modal && shelfList) {
         addShelfBtn.addEventListener('click', () => {
-            if (shelfList) {
-                shelfList.innerHTML = userShelves.length ? userShelves.map(shelf => `
+            if (userShelves && userShelves.length > 0) {
+                shelfList.innerHTML = userShelves.map(shelf => `
                     <div class="shelf-item">
                         <span>${shelf.name || shelf.nome_prateleira}</span>
                         <button class="add-to-shelf-btn btn-small" data-shelf-id="${shelf.id}">Adicionar</button>
                     </div>
-                `).join('') : '<p>Você não tem prateleiras. Crie uma!</p>';
+                `).join('');
                 
                 shelfList.querySelectorAll('.add-to-shelf-btn').forEach(btn => {
                     btn.addEventListener('click', async () => {
+                        const shelfId = btn.dataset.shelfId;
+                        btn.disabled = true;
+                        btn.textContent = 'Adicionando...';
+                        
                         try {
                             const res = await fetch('http://localhost:3000/api/user/shelves/add-book', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 credentials: 'include',
-                                body: JSON.stringify({ shelfId: parseInt(btn.dataset.shelfId), bookId: parseInt(bookId) })
+                                body: JSON.stringify({ 
+                                    shelfId: parseInt(shelfId), 
+                                    bookId: parseInt(bookId) 
+                                })
                             });
                             const result = await res.json();
                             alert(result.message || result.error);
                             if (res.ok) modal.style.display = 'none';
                         } catch (error) {
                             alert('Erro ao adicionar livro.');
+                        } finally {
+                            btn.disabled = false;
+                            btn.textContent = 'Adicionar';
                         }
                     });
                 });
+            } else {
+                shelfList.innerHTML = '<p>Você não tem prateleiras. Crie uma na seção "Minhas Prateleiras"!</p>';
             }
             modal.style.display = 'block';
         });
     }
 
-    if (closeBtn) closeBtn.addEventListener('click', () => { if (modal) modal.style.display = 'none'; });
-    window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => { 
+            if (modal) modal.style.display = 'none'; 
+        });
+    }
+    
+    window.addEventListener('click', (e) => { 
+        if (e.target === modal) modal.style.display = 'none'; 
+    });
+    
+    const createShelfModalBtn = container.querySelector('#createShelfModalBtn');
+    if (createShelfModalBtn) {
+        createShelfModalBtn.addEventListener('click', () => {
+            const shelfName = prompt('Digite o nome da nova prateleira:');
+            if (!shelfName || !shelfName.trim()) return;
+            
+            fetch('http://localhost:3000/api/user/shelves', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ name: shelfName.trim() })
+            })
+            .then(res => res.json())
+            .then(result => {
+                alert(result.message || result.error);
+                if (result.message) location.reload();
+            })
+            .catch(error => {
+                console.error('Erro ao criar prateleira:', error);
+                alert('Erro ao criar prateleira');
+            });
+        });
+    }
 }

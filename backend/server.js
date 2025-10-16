@@ -367,8 +367,9 @@ app.get('/api/profile', isAuthenticated, async (req, res) => {
     }
 });
 
+
 app.put('/api/profile/avatar', isAuthenticated, async (req, res) => {
-    console.log('=== DEBUG: Upload de avatar ===');
+    console.log('=== UPLOAD DE AVATAR ===');
     console.log('Body recebido:', { hasAvatarUrl: !!req.body.avatarUrl });
     console.log('User CPF da sessão:', req.session.user.cpf);
     
@@ -380,9 +381,30 @@ app.put('/api/profile/avatar', isAuthenticated, async (req, res) => {
         return res.status(400).json({ error: 'URL do avatar é obrigatória' });
     }
     
-    if (!avatarUrl.startsWith('data:image/')) {
-        console.log('Formato de avatar inválido');
-        return res.status(400).json({ error: 'Formato de imagem inválido' });
+    // CORREÇÃO: Aceitar data:image/ OU URLs http/https
+    const isValidFormat = avatarUrl.startsWith('data:image/') || 
+                          avatarUrl.startsWith('http://') || 
+                          avatarUrl.startsWith('https://');
+    
+    if (!isValidFormat) {
+        console.log('Formato de avatar inválido:', avatarUrl.substring(0, 50));
+        return res.status(400).json({ 
+            error: 'Formato de imagem inválido. Use uma imagem em base64 ou URL válida.' 
+        });
+    }
+    
+    // Verificar tamanho apenas para base64
+    if (avatarUrl.startsWith('data:image/')) {
+        const base64Size = Buffer.byteLength(avatarUrl, 'utf8');
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        
+        if (base64Size > maxSize) {
+            console.log('Avatar muito grande:', base64Size);
+            return res.status(400).json({ 
+                error: 'Imagem muito grande. Máximo 10MB.',
+                size: `${(base64Size / 1024 / 1024).toFixed(2)}MB`
+            });
+        }
     }
     
     let connection;
@@ -391,17 +413,16 @@ app.put('/api/profile/avatar', isAuthenticated, async (req, res) => {
         connection = await pool.getConnection();
         
         const [result] = await connection.execute(
-            'UPDATE usuarios SET avatar_url = ? WHERE cpf = ?',
+            'UPDATE usuarios SET avatar_url = ?, data_atualizacao = NOW() WHERE cpf = ?',
             [avatarUrl, userCpf]
         );
         
         console.log('Resultado da atualização:', result.affectedRows);
         
         if (result.affectedRows > 0) {
-            // Atualizar sessão
             req.session.user.avatar_url = avatarUrl;
             
-            console.log('Avatar atualizado com sucesso');
+            console.log('✅ Avatar atualizado com sucesso');
             res.status(200).json({ 
                 message: 'Avatar atualizado com sucesso!',
                 avatar_url: avatarUrl
@@ -413,16 +434,24 @@ app.put('/api/profile/avatar', isAuthenticated, async (req, res) => {
     } catch (error) {
         console.error('=== ERRO NO UPLOAD DE AVATAR ===');
         console.error('Mensagem:', error.message);
-        res.status(500).json({ 
-            error: 'Erro interno do servidor',
-            details: error.message 
-        });
-    } finally {
-        if (connection) {
-            connection.release();
+        console.error('Código:', error.code);
+        
+        if (error.code === 'ER_NET_PACKET_TOO_LARGE' || error.code === 'WARN_DATA_TRUNCATED') {
+            res.status(413).json({ 
+                error: 'Imagem muito grande para o banco de dados.',
+                tip: 'Tente reduzir a qualidade ou tamanho da imagem'
+            });
+        } else {
+            res.status(500).json({ 
+                error: 'Erro ao salvar avatar',
+                details: error.message 
+            });
         }
+    } finally {
+        if (connection) connection.release();
     }
 });
+
 
 app.put('/api/profile/bio', isAuthenticated, async (req, res) => {
     const { bio } = req.body;
@@ -605,6 +634,9 @@ app.post('/api/loan/request', isAuthenticated, async (req, res) => {
     const { bookId } = req.body;
     const userCpf = req.session.user.cpf;
     
+    console.log('=== SOLICITAÇÃO DE EMPRÉSTIMO ===');
+    console.log('BookId:', bookId, 'CPF:', userCpf);
+    
     if (!bookId) {
         return res.status(400).json({ error: 'ID do livro é obrigatório' });
     }
@@ -614,7 +646,7 @@ app.post('/api/loan/request', isAuthenticated, async (req, res) => {
         connection = await pool.getConnection();
         await connection.beginTransaction();
         
-        // Verificar limite de 3 empréstimos ativos
+        // Verificar limite de 3 empréstimos ativos/aguardando
         const [activeLoans] = await connection.execute(
             'SELECT COUNT(*) as total FROM emprestimos WHERE cpf = ? AND status IN ("ativo", "aguardando_retirada")',
             [userCpf]
@@ -638,7 +670,7 @@ app.post('/api/loan/request', isAuthenticated, async (req, res) => {
             return res.status(404).json({ error: 'Livro não encontrado' });
         }
         
-        // Verificar se já existe empréstimo ativo
+        // Verificar se já existe empréstimo ativo ou aguardando
         const [existingLoans] = await connection.execute(
             'SELECT * FROM emprestimos WHERE bookId = ? AND status IN ("ativo", "aguardando_retirada")', 
             [bookId]
@@ -647,7 +679,7 @@ app.post('/api/loan/request', isAuthenticated, async (req, res) => {
         if (existingLoans.length > 0) {
             await connection.rollback();
             return res.status(400).json({ 
-                error: 'Livro já está emprestado ou aguardando retirada' 
+                error: 'Este livro já está emprestado ou aguardando aprovação' 
             });
         }
         
@@ -661,9 +693,11 @@ app.post('/api/loan/request', isAuthenticated, async (req, res) => {
             VALUES (?, ?, ?, ?, 'aguardando_retirada')
         `, [bookId, userCpf, dataRetirada, dataPrevisaDevolucao]);
         
+        console.log('✅ Empréstimo criado com status: aguardando_retirada');
+        
         await connection.commit();
         res.status(200).json({ 
-            message: 'Empréstimo solicitado! Aguardando retirada na biblioteca.' 
+            message: '📚 Empréstimo solicitado! Aguardando aprovação do bibliotecário.' 
         });
         
     } catch (error) {
@@ -776,11 +810,14 @@ app.post('/api/loan/request-return', isAuthenticated, async (req, res) => {
     const { bookId } = req.body;
     const userCpf = req.session.user.cpf;
     
+    console.log('=== SOLICITAÇÃO DE DEVOLUÇÃO ===');
+    console.log('BookId:', bookId, 'CPF:', userCpf);
+    
     let connection;
     try {
         connection = await pool.getConnection();
         
-        // Atualizar status do empréstimo
+        // Atualizar status para "pendente_devolucao"
         const [result] = await connection.execute(`
             UPDATE emprestimos 
             SET status = 'pendente_devolucao', data_real_devolucao = NOW() 
@@ -788,9 +825,14 @@ app.post('/api/loan/request-return', isAuthenticated, async (req, res) => {
         `, [bookId, userCpf]);
         
         if (result.affectedRows > 0) {
-            res.status(200).json({ message: 'Solicitação de devolução enviada!' });
+            console.log('✅ Devolução solicitada - Status: pendente_devolucao');
+            res.status(200).json({ 
+                message: '📖 Devolução solicitada! Aguardando aprovação do bibliotecário.' 
+            });
         } else {
-            res.status(400).json({ error: 'Empréstimo não encontrado' });
+            res.status(400).json({ 
+                error: 'Empréstimo ativo não encontrado' 
+            });
         }
         
     } catch (error) {
@@ -802,42 +844,47 @@ app.post('/api/loan/request-return', isAuthenticated, async (req, res) => {
 });
 
 // Cancelar reserva
-app.post('/api/loan/cancel-reserve', isAuthenticated, async (req, res) => {
+
+app.post('/api/loan/cancel-request', isAuthenticated, async (req, res) => {
     const { bookId } = req.body;
     const userCpf = req.session.user.cpf;
+    
+    console.log('=== CANCELAR SOLICITAÇÃO ===');
+    console.log('BookId:', bookId, 'CPF:', userCpf);
     
     let connection;
     try {
         connection = await pool.getConnection();
         await connection.beginTransaction();
         
-        // Remover da fila
+        // Cancelar empréstimo aguardando retirada
         const [result] = await connection.execute(
-            'DELETE FROM reservas WHERE bookId = ? AND cpf = ? AND status = "aguardando"',
+            'DELETE FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
             [bookId, userCpf]
         );
         
         if (result.affectedRows > 0) {
-            // Reorganizar posições da fila
-            await connection.execute(
-                'SET @pos = 0',
-                []
-            );
-            await connection.execute(
-                'UPDATE reservas SET posicao = (@pos := @pos + 1) WHERE bookId = ? AND status = "aguardando" ORDER BY posicao',
-                [bookId]
-            );
-            
             await connection.commit();
-            res.json({ message: 'Reserva cancelada com sucesso!' });
+            res.json({ message: 'Solicitação cancelada com sucesso!' });
         } else {
+            // Tentar cancelar reserva
             await connection.rollback();
-            res.status(404).json({ error: 'Reserva não encontrada' });
+            const cancelReserveResult = await fetch('http://localhost:3000/api/loan/cancel-reserve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookId })
+            });
+            
+            if (cancelReserveResult.ok) {
+                res.json({ message: 'Reserva cancelada com sucesso!' });
+            } else {
+                res.status(404).json({ error: 'Solicitação não encontrada' });
+            }
         }
         
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('Erro ao cancelar reserva:', error);
+        console.error('Erro ao cancelar solicitação:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
@@ -848,6 +895,9 @@ app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
     const { bookId, status } = req.body;
     const userCpf = req.session.user.cpf;
     
+    console.log('=== MARCAR COMO LIDO ===');
+    console.log('BookId:', bookId, 'Status:', status, 'CPF:', userCpf);
+    
     if (!['lido', 'nao_terminado'].includes(status)) {
         return res.status(400).json({ error: 'Status inválido' });
     }
@@ -855,35 +905,55 @@ app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
     let connection;
     try {
         connection = await pool.getConnection();
+        await connection.beginTransaction();
         
-        // IMPORTANTE: Só permitir se o livro JÁ FOI DEVOLVIDO
+        // Buscar empréstimo devolvido mais recente
         const [emprestimo] = await connection.execute(
-            'SELECT * FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = "devolvido" ORDER BY data_real_devolucao DESC LIMIT 1',
+            `SELECT * FROM emprestimos 
+             WHERE bookId = ? AND cpf = ? AND status = 'devolvido' 
+             ORDER BY data_real_devolucao DESC LIMIT 1`,
             [bookId, userCpf]
         );
         
         if (emprestimo.length === 0) {
+            await connection.rollback();
             return res.status(400).json({ 
                 error: 'Você só pode marcar como lido após devolver o livro' 
             });
         }
         
+        const emprestimoId = emprestimo[0].id;
+        const statusAnterior = emprestimo[0].status_leitura;
+        
         // Atualizar status de leitura
         await connection.execute(
             'UPDATE emprestimos SET status_leitura = ?, data_marcado_lido = ? WHERE id = ?',
-            [status, status === 'lido' ? new Date() : null, emprestimo[0].id]
+            [status, status === 'lido' ? new Date() : null, emprestimoId]
         );
         
-        // Se marcado como lido, incrementar contador
-        if (status === 'lido' && emprestimo[0].status_leitura !== 'lido') {
+        // Se marcado como lido E não estava lido antes, incrementar contador
+        if (status === 'lido' && statusAnterior !== 'lido') {
             await connection.execute(
                 'UPDATE usuarios SET livros_lidos = livros_lidos + 1 WHERE cpf = ?',
                 [userCpf]
             );
             
             // Verificar conquistas
-            await connection.execute('CALL VerificarConquistas(?)', [userCpf]);
+            try {
+                await connection.execute('CALL VerificarConquistas(?)', [userCpf]);
+            } catch (error) {
+                console.log('Erro ao verificar conquistas:', error.message);
+            }
         }
+        // Se estava lido e agora não está, decrementar
+        else if (status === 'nao_terminado' && statusAnterior === 'lido') {
+            await connection.execute(
+                'UPDATE usuarios SET livros_lidos = GREATEST(livros_lidos - 1, 0) WHERE cpf = ?',
+                [userCpf]
+            );
+        }
+        
+        await connection.commit();
         
         res.json({ 
             message: status === 'lido' ? 
@@ -892,6 +962,7 @@ app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
         });
         
     } catch (error) {
+        if (connection) await connection.rollback();
         console.error('Erro ao marcar status:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
@@ -1038,10 +1109,14 @@ app.get('/api/reviews/:bookId', async (req, res) => {
 });
 
 // Atualizar resenha
+
 app.put('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
     const { reviewId } = req.params;
     const { text, rating } = req.body;
     const userCpf = req.session.user.cpf;
+    
+    console.log('=== EDITAR RESENHA ===');
+    console.log('ReviewId:', reviewId, 'Rating:', rating);
     
     if (!rating || rating < 1 || rating > 5) {
         return res.status(400).json({ error: 'Rating deve ser entre 1 e 5' });
@@ -1062,7 +1137,7 @@ app.put('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
         }
         
         await connection.execute(
-            'UPDATE resenhas SET text = ?, rating = ?, data_atualizacao = NOW() WHERE id = ?',
+            'UPDATE resenhas SET text = ?, rating = ?, date = NOW() WHERE id = ?',
             [text || '', rating, reviewId]
         );
         
@@ -1112,43 +1187,79 @@ app.delete('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
 // SISTEMA DE CONQUISTAS
 // ================================
 
-// Rota para buscar conquistas do usuário
 app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
     const userCpf = req.session.user.cpf;
+    
+    console.log('=== BUSCANDO CONQUISTAS ===');
+    console.log('CPF do usuário:', userCpf);
     
     let connection;
     try {
         connection = await pool.getConnection();
         
+        // Buscar conquistas do usuário
         const [userData] = await connection.execute(
             'SELECT conquistas_desbloqueadas FROM usuarios WHERE cpf = ?',
             [userCpf]
         );
         
+        console.log('Dados do usuário:', userData[0]);
+        
         let conquistasDesbloqueadas = [];
-        try {
-            const conquistasJson = userData[0].conquistas_desbloqueadas;
-            if (conquistasJson) {
-                conquistasDesbloqueadas = JSON.parse(conquistasJson);
+        
+        // Parse seguro do JSON
+        if (userData[0].conquistas_desbloqueadas) {
+            try {
+                // Se já for um array, usar diretamente
+                if (Array.isArray(userData[0].conquistas_desbloqueadas)) {
+                    conquistasDesbloqueadas = userData[0].conquistas_desbloqueadas;
+                } 
+                // Se for string JSON, parsear
+                else if (typeof userData[0].conquistas_desbloqueadas === 'string') {
+                    conquistasDesbloqueadas = JSON.parse(userData[0].conquistas_desbloqueadas);
+                }
+            } catch (e) {
+                console.log('Erro ao parsear conquistas, usando array vazio:', e.message);
+                conquistasDesbloqueadas = [];
             }
-        } catch (e) {
-            console.log('Erro ao parsear conquistas:', e);
         }
         
+        console.log('Conquistas desbloqueadas (IDs):', conquistasDesbloqueadas);
+        
+        // Buscar todas as conquistas disponíveis
         const [allAchievements] = await connection.execute(
             'SELECT * FROM conquistas_disponiveis WHERE ativa = TRUE ORDER BY ordem_exibicao'
         );
         
-        const achievements = allAchievements.map(achievement => ({
-            ...achievement,
-            desbloqueada: conquistasDesbloqueadas.includes(achievement.id)
-        }));
+        console.log('Total de conquistas disponíveis:', allAchievements.length);
+        
+        // Marcar quais estão desbloqueadas
+        const achievements = allAchievements.map(achievement => {
+            const desbloqueada = conquistasDesbloqueadas.includes(achievement.id);
+            return {
+                id: achievement.id,
+                nome: achievement.nome,
+                descricao: achievement.descricao,
+                icone: achievement.icone,
+                condicao_tipo: achievement.condicao_tipo,
+                condicao_valor: achievement.condicao_valor,
+                desbloqueada: desbloqueada
+            };
+        });
+        
+        console.log('Conquistas processadas:', achievements.length);
+        console.log('Desbloqueadas:', achievements.filter(a => a.desbloqueada).length);
         
         res.json(achievements);
         
     } catch (error) {
-        console.error('Erro ao buscar conquistas:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.error('=== ERRO AO BUSCAR CONQUISTAS ===');
+        console.error('Mensagem:', error.message);
+        console.error('Stack:', error.stack);
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: error.message 
+        });
     } finally {
         if (connection) connection.release();
     }

@@ -1,7 +1,15 @@
+-- ==========================================
+-- BANCO DE DADOS LIBRAIN - VERSÃO LIMPA E CORRIGIDA
+-- ==========================================
+
 -- Criação do banco de dados
 DROP DATABASE IF EXISTS librain;
 CREATE DATABASE librain CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE librain;
+
+-- ==========================================
+-- TABELAS
+-- ==========================================
 
 -- Tabela de usuários
 CREATE TABLE usuarios (
@@ -48,7 +56,7 @@ CREATE TABLE livros (
     data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Tabela de empréstimos
+-- Tabela de empréstimos (COM STATUS AGUARDANDO_RETIRADA)
 CREATE TABLE emprestimos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     bookId INT NOT NULL,
@@ -56,7 +64,7 @@ CREATE TABLE emprestimos (
     data_retirada DATE NOT NULL,
     data_prevista_devolucao DATE NOT NULL,
     data_real_devolucao DATE NULL,
-    status ENUM('ativo', 'devolvido', 'atrasado', 'pendente_devolucao') DEFAULT 'ativo',
+    status ENUM('aguardando_retirada', 'ativo', 'devolvido', 'atrasado', 'pendente_devolucao') DEFAULT 'aguardando_retirada',
     status_leitura ENUM('lendo', 'lido', 'nao_terminado') DEFAULT 'lendo',
     data_marcado_lido DATE NULL,
     renovacoes INT DEFAULT 0,
@@ -159,7 +167,214 @@ CREATE TABLE conquistas_disponiveis (
 );
 
 -- ==========================================
--- INSERÇÃO DE 45 LIVROS POPULARES
+-- ÍNDICES PARA PERFORMANCE
+-- ==========================================
+
+CREATE INDEX idx_usuarios_cpf ON usuarios(cpf);
+CREATE INDEX idx_usuarios_email ON usuarios(email);
+CREATE INDEX idx_usuarios_tipo ON usuarios(tipo);
+CREATE INDEX idx_emprestimos_cpf ON emprestimos(cpf);
+CREATE INDEX idx_emprestimos_bookid ON emprestimos(bookId);
+CREATE INDEX idx_emprestimos_status ON emprestimos(status);
+CREATE INDEX idx_reservas_cpf ON reservas(cpf);
+CREATE INDEX idx_reservas_bookid ON reservas(bookId);
+CREATE INDEX idx_livros_title ON livros(title);
+CREATE INDEX idx_livros_author ON livros(author);
+CREATE INDEX idx_livros_genre ON livros(genre);
+
+-- ==========================================
+-- TRIGGERS
+-- ==========================================
+
+DELIMITER //
+
+-- Trigger: Quando empréstimo é inserido com status ATIVO, marcar livro como indisponível
+CREATE TRIGGER after_emprestimo_insert
+AFTER INSERT ON emprestimos
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'ativo' THEN
+        UPDATE livros SET disponivel = FALSE WHERE id = NEW.bookId;
+    END IF;
+END//
+
+-- Trigger: Quando empréstimo é atualizado
+CREATE TRIGGER after_emprestimo_update
+AFTER UPDATE ON emprestimos
+FOR EACH ROW
+BEGIN
+    -- Se mudou para devolvido, liberar livro
+    IF NEW.status = 'devolvido' AND OLD.status != 'devolvido' THEN
+        UPDATE livros SET disponivel = TRUE WHERE id = NEW.bookId;
+        
+        -- Se marcou como lido, incrementar contador
+        IF NEW.status_leitura = 'lido' AND OLD.status_leitura != 'lido' THEN
+            UPDATE usuarios SET livros_lidos = livros_lidos + 1 WHERE cpf = NEW.cpf;
+        END IF;
+    END IF;
+    
+    -- Se mudou de aguardando_retirada para ativo, marcar livro como indisponível
+    IF NEW.status = 'ativo' AND OLD.status = 'aguardando_retirada' THEN
+        UPDATE livros SET disponivel = FALSE WHERE id = NEW.bookId;
+    END IF;
+END//
+
+DELIMITER ;
+
+-- ==========================================
+-- STORED PROCEDURE PARA CONQUISTAS
+-- ==========================================
+
+DELIMITER //
+
+CREATE PROCEDURE VerificarConquistas(IN user_cpf VARCHAR(11))
+BEGIN
+    DECLARE done INT DEFAULT FALSE;
+    DECLARE conquista_id_val INT;
+    DECLARE conquista_nome VARCHAR(100);
+    DECLARE conquista_tipo ENUM('livros_lidos', 'emprestimos_realizados', 'resenhas_escritas', 'dias_cadastrado');
+    DECLARE conquista_valor INT;
+    DECLARE user_stat INT DEFAULT 0;
+    DECLARE user_conquistas JSON;
+    
+    DECLARE conquistas_cursor CURSOR FOR
+        SELECT id, nome, condicao_tipo, condicao_valor 
+        FROM conquistas_disponiveis 
+        WHERE ativa = TRUE
+        ORDER BY ordem_exibicao;
+    
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+    
+    -- Inicializar conquistas do usuário (garantir que seja JSON array)
+    SELECT COALESCE(conquistas_desbloqueadas, JSON_ARRAY()) INTO user_conquistas
+    FROM usuarios WHERE cpf = user_cpf;
+    
+    OPEN conquistas_cursor;
+    
+    read_loop: LOOP
+        FETCH conquistas_cursor INTO conquista_id_val, conquista_nome, conquista_tipo, conquista_valor;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+        
+        -- Verificar se conquista já foi desbloqueada
+        IF NOT JSON_CONTAINS(user_conquistas, CAST(conquista_id_val AS JSON), '$') THEN
+        
+            -- Obter estatística do usuário
+            CASE conquista_tipo
+                WHEN 'livros_lidos' THEN
+                    SELECT livros_lidos INTO user_stat FROM usuarios WHERE cpf = user_cpf;
+                WHEN 'emprestimos_realizados' THEN
+                    SELECT COUNT(*) INTO user_stat FROM emprestimos WHERE cpf = user_cpf;
+                WHEN 'resenhas_escritas' THEN
+                    SELECT COUNT(*) INTO user_stat FROM resenhas WHERE cpf = user_cpf;
+                WHEN 'dias_cadastrado' THEN
+                    SELECT DATEDIFF(CURDATE(), data_cadastro) INTO user_stat FROM usuarios WHERE cpf = user_cpf;
+            END CASE;
+            
+            -- Verificar se atingiu a meta
+            IF user_stat >= conquista_valor THEN
+            
+                -- Desbloquear conquista
+                UPDATE usuarios 
+                SET conquistas_desbloqueadas = JSON_ARRAY_APPEND(
+                    COALESCE(conquistas_desbloqueadas, JSON_ARRAY()), 
+                    '$', 
+                    conquista_id_val
+                )
+                WHERE cpf = user_cpf;
+                
+                -- Criar notificação
+                INSERT INTO notificacoes (cpf, tipo, titulo, mensagem)
+                VALUES (user_cpf, 'conquista', 'Nova Conquista Desbloqueada!', 
+                        CONCAT('Parabéns! Você desbloqueou: ', conquista_nome));
+                        
+                -- Atualizar conquistas locais para não tentar desbloquear novamente
+                SELECT conquistas_desbloqueadas INTO user_conquistas
+                FROM usuarios WHERE cpf = user_cpf;
+            END IF;
+        END IF;
+    END LOOP;
+    
+    CLOSE conquistas_cursor;
+END//
+
+DELIMITER ;
+
+-- ==========================================
+-- VIEWS ÚTEIS
+-- ==========================================
+
+CREATE VIEW view_emprestimos_ativos AS
+SELECT 
+    e.id,
+    e.bookId,
+    e.cpf,
+    u.nome as nome_usuario,
+    l.title as titulo_livro,
+    l.author as autor_livro,
+    e.data_retirada,
+    e.data_prevista_devolucao,
+    e.status,
+    DATEDIFF(CURDATE(), e.data_prevista_devolucao) as dias_atraso
+FROM emprestimos e
+JOIN usuarios u ON e.cpf = u.cpf
+JOIN livros l ON e.bookId = l.id
+WHERE e.status IN ('ativo', 'aguardando_retirada', 'pendente_devolucao');
+
+CREATE VIEW view_estatisticas_usuarios AS
+SELECT 
+    u.cpf,
+    u.nome,
+    u.tipo,
+    u.livros_lidos,
+    u.data_cadastro,
+    COUNT(DISTINCT e.id) as total_emprestimos,
+    COUNT(DISTINCT f.id) as total_favoritos,
+    COUNT(DISTINCT r.id) as total_resenhas,
+    COUNT(DISTINCT p.id) as total_prateleiras
+FROM usuarios u
+LEFT JOIN emprestimos e ON u.cpf = e.cpf
+LEFT JOIN favoritos f ON u.cpf = f.cpf
+LEFT JOIN resenhas r ON u.cpf = r.cpf
+LEFT JOIN prateleiras p ON u.cpf = p.cpf
+GROUP BY u.cpf;
+
+-- ==========================================
+-- INSERÇÃO DE DADOS INICIAIS
+-- ==========================================
+
+-- Admin padrão
+INSERT INTO usuarios (nome, cpf, email, senha_hash, tipo, cidade, estado) VALUES
+('Administrador do Sistema', '12345678900', 'admin@librain.com', 'admin123', 'admin', 'São João da Boa Vista', 'SP');
+
+-- Usuário teste
+INSERT INTO usuarios (nome, cpf, email, senha_hash, tipo, cidade, estado, genero) VALUES
+('Usuário Teste', '11111111111', 'teste@librain.com', '$2a$10$L3KFRj4y2h5nYgRhC8ZK8.rO5fJ9qR2N4LM6KF5dK3vH8pO5iG3Pa', 'leitor', 'São Paulo', 'SP', 'nao_informar');
+
+-- ==========================================
+-- CONQUISTAS
+-- ==========================================
+
+INSERT INTO conquistas_disponiveis (nome, descricao, icone, condicao_tipo, condicao_valor, ordem_exibicao) VALUES
+('Primeiro Passo', 'Realize seu primeiro empréstimo', '📚', 'emprestimos_realizados', 1, 1),
+('Leitor Iniciante', 'Leia 3 livros', '🔥', 'livros_lidos', 3, 2),
+('Leitor Regular', 'Leia 5 livros', '📖', 'livros_lidos', 5, 3),
+('Bibliotecário', 'Leia 10 livros', '📚', 'livros_lidos', 10, 4),
+('Devorador de Livros', 'Leia 25 livros', '🎓', 'livros_lidos', 25, 5),
+('Mestre dos Livros', 'Leia 50 livros', '👑', 'livros_lidos', 50, 6),
+('Crítico Literário', 'Escreva 5 resenhas', '✍️', 'resenhas_escritas', 5, 7),
+('Resenhista Expert', 'Escreva 15 resenhas', '🏆', 'resenhas_escritas', 15, 8),
+('Grande Crítico', 'Escreva 30 resenhas', '⭐', 'resenhas_escritas', 30, 9),
+('Veterano do Librain', 'Seja membro por 30 dias', '🎖️', 'dias_cadastrado', 30, 10),
+('Membro de Longa Data', 'Seja membro por 90 dias', '💫', 'dias_cadastrado', 90, 11),
+('Lenda do Librain', 'Seja membro por 365 dias', '🌟', 'dias_cadastrado', 365, 12),
+('Explorador Ativo', 'Realize 5 empréstimos', '🚀', 'emprestimos_realizados', 5, 13),
+('Usuário Dedicado', 'Realize 20 empréstimos', '💎', 'emprestimos_realizados', 20, 14),
+('Maratonista Literário', 'Realize 50 empréstimos', '🏃', 'emprestimos_realizados', 50, 15);
+
+-- ==========================================
+-- LIVROS (45 LIVROS POPULARES)
 -- ==========================================
 
 INSERT INTO livros (title, author, genre, synopsis, pages, cover, isbn, editora, ano_publicacao) VALUES
@@ -223,411 +438,5 @@ INSERT INTO livros (title, author, genre, synopsis, pages, cover, isbn, editora,
 ('It: A Coisa', 'Stephen King', 'Terror', 'Um grupo de amigos enfrenta uma entidade maligna em sua cidade natal.', 1104, 'https://m.media-amazon.com/images/I/71W0aKfJHmL._SL1500_.jpg', '9788581052380', 'Suma', 1986);
 
 -- ==========================================
--- INSERÇÃO DE CONQUISTAS
+-- FIM DO SCRIPT
 -- ==========================================
-
-INSERT INTO conquistas_disponiveis (nome, descricao, icone, condicao_tipo, condicao_valor, ordem_exibicao) VALUES
-('Primeiro Passo', 'Realize seu primeiro empréstimo', '📚', 'emprestimos_realizados', 1, 1),
-('Leitor Iniciante', 'Leia 3 livros', '🔥', 'livros_lidos', 3, 2),
-('Leitor Regular', 'Leia 5 livros', '📖', 'livros_lidos', 5, 3),
-('Bibliotecário', 'Leia 10 livros', '📚', 'livros_lidos', 10, 4),
-('Devorador de Livros', 'Leia 25 livros', '🎓', 'livros_lidos', 25, 5),
-('Mestre dos Livros', 'Leia 50 livros', '👑', 'livros_lidos', 50, 6),
-('Crítico Literário', 'Escreva 5 resenhas', '✍️', 'resenhas_escritas', 5, 7),
-('Resenhista Expert', 'Escreva 15 resenhas', '🏆', 'resenhas_escritas', 15, 8),
-('Grande Crítico', 'Escreva 30 resenhas', '⭐', 'resenhas_escritas', 30, 9),
-('Veterano do Librain', 'Seja membro por 30 dias', '🎖️', 'dias_cadastrado', 30, 10),
-('Membro de Longa Data', 'Seja membro por 90 dias', '💫', 'dias_cadastrado', 90, 11),
-('Lenda do Librain', 'Seja membro por 365 dias', '🌟', 'dias_cadastrado', 365, 12),
-('Explorador Ativo', 'Realize 5 empréstimos', '🚀', 'emprestimos_realizados', 5, 13),
-('Usuário Dedicado', 'Realize 20 empréstimos', '💎', 'emprestimos_realizados', 20, 14),
-('Maratonista Literário', 'Realize 50 empréstimos', '🏃', 'emprestimos_realizados', 50, 15);
-
--- ==========================================
--- USUÁRIOS PADRÃO
--- ==========================================
-
--- Admin padrão
-INSERT INTO usuarios (nome, cpf, email, senha_hash, tipo, cidade, estado) VALUES
-('Administrador do Sistema', '12345678900', 'admin@librain.com', 'admin123', 'admin', 'São João da Boa Vista', 'SP');
-
--- Usuário teste
-INSERT INTO usuarios (nome, cpf, email, senha_hash, tipo, cidade, estado, genero) VALUES
-('Usuário Teste', '11111111111', 'teste@librain.com', '$2a$10$L3KFRj4y2h5nYgRhC8ZK8.rO5fJ9qR2N4LM6KF5dK3vH8pO5iG3Pa', 'leitor', 'São Paulo', 'SP', 'nao_informar');
-
--- ==========================================
--- ÍNDICES PARA PERFORMANCE
--- ==========================================
-
-CREATE INDEX idx_usuarios_cpf ON usuarios(cpf);
-CREATE INDEX idx_usuarios_email ON usuarios(email);
-CREATE INDEX idx_usuarios_tipo ON usuarios(tipo);
-CREATE INDEX idx_emprestimos_cpf ON emprestimos(cpf);
-CREATE INDEX idx_emprestimos_bookid ON emprestimos(bookId);
-CREATE INDEX idx_emprestimos_status ON emprestimos(status);
-CREATE INDEX idx_reservas_cpf ON reservas(cpf);
-CREATE INDEX idx_reservas_bookid ON reservas(bookId);
-CREATE INDEX idx_livros_title ON livros(title);
-CREATE INDEX idx_livros_author ON livros(author);
-CREATE INDEX idx_livros_genre ON livros(genre);
-
--- ==========================================
--- TRIGGERS
--- ==========================================
-
-DELIMITER //
-
-CREATE TRIGGER after_emprestimo_insert
-AFTER INSERT ON emprestimos
-FOR EACH ROW
-BEGIN
-    UPDATE livros SET disponivel = FALSE WHERE id = NEW.bookId;
-END//
-
-CREATE TRIGGER after_emprestimo_update
-AFTER UPDATE ON emprestimos
-FOR EACH ROW
-BEGIN
-    IF NEW.status = 'devolvido' AND OLD.status != 'devolvido' THEN
-        UPDATE livros SET disponivel = TRUE WHERE id = NEW.bookId;
-        
-        IF NEW.status_leitura = 'lido' AND OLD.status_leitura != 'lido' THEN
-            UPDATE usuarios SET livros_lidos = livros_lidos + 1 WHERE cpf = NEW.cpf;
-        END IF;
-    END IF;
-END//
-
-DELIMITER ;
-
--- ==========================================
--- STORED PROCEDURE PARA CONQUISTAS
--- ==========================================
-DELIMITER //
-
--- DROP PROCEDURE IF EXISTS VerificarConquistas; -- Você pode adicionar esta linha se estiver reexecutando.
-
-CREATE PROCEDURE VerificarConquistas(IN user_cpf VARCHAR(11))
-BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE conquista_id_val INT; -- Renomeado para evitar conflito com a lógica do JSON
-    DECLARE conquista_nome VARCHAR(100);
-    DECLARE conquista_tipo ENUM('livros_lidos', 'emprestimos_realizados', 'resenhas_escritas', 'dias_cadastrado');
-    DECLARE conquista_valor INT;
-    DECLARE user_stat INT DEFAULT 0;
-    DECLARE user_conquistas JSON;
-    
-    DECLARE conquistas_cursor CURSOR FOR
-        SELECT id, nome, condicao_tipo, condicao_valor 
-        FROM conquistas_disponiveis 
-        WHERE ativa = TRUE
-        ORDER BY ordem_exibicao;
-    
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-    
-    -- Inicializa user_conquistas para garantir que é um JSON array, mesmo que NULL
-    SELECT COALESCE(conquistas_desbloqueadas, JSON_ARRAY()) INTO user_conquistas
-    FROM usuarios WHERE cpf = user_cpf;
-    
-    OPEN conquistas_cursor;
-    
-    read_loop: LOOP
-        FETCH conquistas_cursor INTO conquista_id_val, conquista_nome, conquista_tipo, conquista_valor;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
-        
-        -- Verifica se o ID da conquista JÁ ESTÁ no array de conquistas do usuário.
-        -- JSON_CONTAINS(target, candidate, path). O target é user_conquistas. 
-        -- O candidate é o ID da conquista (precisa ser um JSON).
-        IF NOT JSON_CONTAINS(user_conquistas, CAST(conquista_id_val AS JSON), '$') THEN
-        
-            -- 1. Obter a estatística atual do usuário
-            CASE conquista_tipo
-                WHEN 'livros_lidos' THEN
-                    SELECT livros_lidos INTO user_stat FROM usuarios WHERE cpf = user_cpf;
-                WHEN 'emprestimos_realizados' THEN
-                    -- COUNT(*) em emprestimos
-                    SELECT COUNT(*) INTO user_stat FROM emprestimos WHERE cpf = user_cpf;
-                WHEN 'resenhas_escritas' THEN
-                    -- COUNT(*) em resenhas
-                    SELECT COUNT(*) INTO user_stat FROM resenhas WHERE cpf = user_cpf;
-                WHEN 'dias_cadastrado' THEN
-                    -- DATEDIFF(CURDATE(), data_cadastro)
-                    SELECT DATEDIFF(CURDATE(), data_cadastro) INTO user_stat FROM usuarios WHERE cpf = user_cpf;
-            END CASE;
-            
-            -- 2. Comparar com o valor da condição
-            IF user_stat >= conquista_valor THEN
-            
-                -- 3. Desbloquear a conquista e adicionar ao JSON
-                UPDATE usuarios 
-                -- O caminho é '$' para adicionar ao array raiz. O valor é o ID.
-                SET conquistas_desbloqueadas = JSON_ARRAY_APPEND(COALESCE(conquistas_desbloqueadas, JSON_ARRAY()), '$', conquista_id_val)
-                WHERE cpf = user_cpf;
-                
-                -- 4. Inserir notificação
-                INSERT INTO notificacoes (cpf, tipo, titulo, mensagem)
-                VALUES (user_cpf, 'conquista', 'Nova Conquista Desbloqueada!', 
-                        CONCAT('Parabéns! Você desbloqueou: ', conquista_nome));
-                        
-                -- 5. Atualizar o user_conquistas localmente para o loop não tentar desbloquear novamente
-                SELECT conquistas_desbloqueadas INTO user_conquistas
-                FROM usuarios WHERE cpf = user_cpf;
-            END IF;
-        END IF;
-    END LOOP;
-    
-    CLOSE conquistas_cursor;
-END//
-
-DELIMITER ;
-
--- ==========================================
--- VIEWS ÚTEIS
--- ==========================================
-
-CREATE VIEW view_emprestimos_ativos AS
-SELECT 
-    e.id,
-    e.bookId,
-    e.cpf,
-    u.nome as nome_usuario,
-    l.title as titulo_livro,
-    l.author as autor_livro,
-    e.data_retirada,
-    e.data_prevista_devolucao,
-    e.status,
-    DATEDIFF(CURDATE(), e.data_prevista_devolucao) as dias_atraso
-FROM emprestimos e
-JOIN usuarios u ON e.cpf = u.cpf
-JOIN livros l ON e.bookId = l.id
-WHERE e.status IN ('ativo', 'pendente_devolucao');
-
-CREATE VIEW view_estatisticas_usuarios AS
-SELECT 
-    u.cpf,
-    u.nome,
-    u.tipo,
-    u.livros_lidos,
-    u.data_cadastro,
-    COUNT(DISTINCT e.id) as total_emprestimos,
-    COUNT(DISTINCT f.id) as total_favoritos,
-    COUNT(DISTINCT r.id) as total_resenhas,
-    COUNT(DISTINCT p.id) as total_prateleiras
-FROM usuarios u
-LEFT JOIN emprestimos e ON u.cpf = e.cpf
-LEFT JOIN favoritos f ON u.cpf = f.cpf
-LEFT JOIN resenhas r ON u.cpf = r.cpf
-LEFT JOIN prateleiras p ON u.cpf = p.cpf
-GROUP BY u.cpf;
-
-
--- Adicionar novo status ao ENUM
-ALTER TABLE emprestimos 
-MODIFY COLUMN status ENUM('aguardando_retirada', 'ativo', 'devolvido', 'atrasado', 'pendente_devolucao') 
-DEFAULT 'aguardando_retirada';
-
-
--- ==========================================
--- SCRIPT DE CORREÇÃO DE EMPRÉSTIMOS
--- Execute este SQL no MySQL
--- ==========================================
-
--- 1. Primeiro, adicionar a coluna se não existir
-ALTER TABLE emprestimos 
-MODIFY COLUMN status ENUM('aguardando_retirada', 'ativo', 'devolvido', 'atrasado', 'pendente_devolucao') 
-DEFAULT 'aguardando_retirada';
-
--- 2. Atualizar empréstimos antigos (criados antes de hoje) para status "ativo"
--- Eles já foram retirados, apenas o sistema não tinha essa funcionalidade antes
-UPDATE emprestimos 
-SET status = 'ativo' 
-WHERE status = 'aguardando_retirada' 
-  AND DATE(data_retirada) < CURDATE();
-
--- 3. Verificar quantos foram atualizados
-SELECT 
-    COUNT(*) as total_atualizados,
-    'Empréstimos antigos marcados como ativos' as descricao
-FROM emprestimos 
-WHERE status = 'ativo' 
-  AND DATE(data_retirada) < CURDATE();
-
--- 4. Ver status atual dos empréstimos
-SELECT 
-    status,
-    COUNT(*) as quantidade,
-    CASE 
-        WHEN status = 'aguardando_retirada' THEN 'Aguardando confirmação do admin'
-        WHEN status = 'ativo' THEN 'Confirmado e ativo'
-        WHEN status = 'pendente_devolucao' THEN 'Aguardando devolução'
-        WHEN status = 'devolvido' THEN 'Já devolvido'
-        ELSE 'Outro status'
-    END as descricao
-FROM emprestimos
-WHERE status IN ('aguardando_retirada', 'ativo', 'pendente_devolucao')
-GROUP BY status
-ORDER BY 
-    CASE status 
-        WHEN 'aguardando_retirada' THEN 1 
-        WHEN 'ativo' THEN 2 
-        WHEN 'pendente_devolucao' THEN 3 
-    END;
-
--- 5. (OPCIONAL) Ver detalhes dos empréstimos aguardando retirada
-SELECT 
-    e.id,
-    l.title as livro,
-    u.nome as usuario,
-    e.status,
-    DATE_FORMAT(e.data_retirada, '%d/%m/%Y') as data_solicitacao,
-    DATEDIFF(CURDATE(), e.data_retirada) as dias_desde_solicitacao
-FROM emprestimos e
-JOIN livros l ON e.bookId = l.id
-JOIN usuarios u ON e.cpf = u.cpf
-WHERE e.status = 'aguardando_retirada'
-ORDER BY e.data_retirada DESC;
-
-
-
-
-
-
-
-
-
-
-
-
--- ==========================================
--- SCRIPT PARA LIMPAR E CORRIGIR EMPRÉSTIMOS
--- Execute este SQL no MySQL
--- ==========================================
-
--- 1. Ver situação atual dos empréstimos
-SELECT 
-    l.title as livro,
-    u.nome as usuario,
-    e.status,
-    DATE_FORMAT(e.data_retirada, '%d/%m/%Y %H:%i') as data_solicitacao,
-    CASE 
-        WHEN e.status = 'aguardando_retirada' THEN 'Aguardando admin confirmar'
-        WHEN e.status = 'ativo' THEN 'Confirmado e em posse do usuário'
-        ELSE e.status
-    END as descricao
-FROM emprestimos e
-JOIN livros l ON e.bookId = l.id
-JOIN usuarios u ON e.cpf = u.cpf
-WHERE e.status IN ('aguardando_retirada', 'ativo')
-ORDER BY e.data_retirada DESC;
-
--- 2. Identificar livros com múltiplos empréstimos ativos (PROBLEMA!)
-SELECT 
-    bookId,
-    COUNT(*) as total_emprestimos,
-    GROUP_CONCAT(CONCAT(status, ' (', cpf, ')') SEPARATOR ', ') as detalhes
-FROM emprestimos
-WHERE status IN ('aguardando_retirada', 'ativo')
-GROUP BY bookId
-HAVING COUNT(*) > 1;
-
--- 3. CORREÇÃO: Remover empréstimos duplicados
--- Mantém apenas o mais recente de cada livro
-DELETE e1 FROM emprestimos e1
-INNER JOIN emprestimos e2 
-WHERE e1.bookId = e2.bookId 
-  AND e1.id < e2.id
-  AND e1.status IN ('aguardando_retirada', 'ativo')
-  AND e2.status IN ('aguardando_retirada', 'ativo');
-
--- 4. (OPCIONAL) Se quiser manter apenas empréstimos "aguardando_retirada" recentes
--- e converter ativos antigos para devolvidos:
-UPDATE emprestimos 
-SET status = 'devolvido', 
-    data_real_devolucao = CURDATE()
-WHERE status = 'ativo' 
-  AND DATE(data_retirada) < CURDATE() - INTERVAL 1 DAY;
-
--- 5. Verificar resultado final
-SELECT 
-    COUNT(*) as total,
-    status,
-    CASE 
-        WHEN status = 'aguardando_retirada' THEN '🕐 Precisa confirmar retirada'
-        WHEN status = 'ativo' THEN '✓ Confirmado e ativo'
-        WHEN status = 'devolvido' THEN '📚 Já devolvido'
-        ELSE status
-    END as descricao
-FROM emprestimos
-WHERE status IN ('aguardando_retirada', 'ativo', 'devolvido')
-GROUP BY status;
-
--- 6. Testar disponibilidade dos livros
-SELECT 
-    l.id,
-    l.title,
-    CASE 
-        WHEN e.id IS NOT NULL AND e.status = 'ativo' THEN 'Indisponível (emprestado)'
-        WHEN e.id IS NOT NULL AND e.status = 'aguardando_retirada' THEN 'Disponível (aguardando confirmação)'
-        ELSE 'Disponível'
-    END as status_livro,
-    e.cpf as emprestado_para
-FROM livros l
-LEFT JOIN emprestimos e ON l.id = e.bookId 
-  AND e.status IN ('ativo', 'aguardando_retirada')
-ORDER BY l.title
-LIMIT 20;
-
--- ==========================================
--- VERIFICAR ESTADO ATUAL DOS EMPRÉSTIMOS
--- ==========================================
-
--- 1. Ver todos os empréstimos ativos e aguardando
-SELECT 
-    e.id,
-    l.title as livro,
-    u.nome as usuario,
-    e.cpf,
-    e.status,
-    DATE_FORMAT(e.data_retirada, '%d/%m/%Y %H:%i') as quando_solicitou,
-    DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as deve_devolver
-FROM emprestimos e
-JOIN livros l ON e.bookId = l.id
-JOIN usuarios u ON e.cpf = u.cpf
-WHERE e.status IN ('aguardando_retirada', 'ativo')
-ORDER BY 
-    CASE e.status 
-        WHEN 'aguardando_retirada' THEN 1
-        WHEN 'ativo' THEN 2
-    END,
-    e.data_retirada DESC;
-
--- 2. Contar por status
-SELECT 
-    status,
-    COUNT(*) as quantidade
-FROM emprestimos
-WHERE status IN ('aguardando_retirada', 'ativo', 'pendente_devolucao', 'devolvido')
-GROUP BY status;
-
--- 3. Se não tiver nenhum "aguardando_retirada", vamos criar um teste
--- APENAS PARA TESTE - Crie um empréstimo aguardando retirada
--- Substitua os valores abaixo pelos seus dados reais:
-
-/*
-INSERT INTO emprestimos (bookId, cpf, data_retirada, data_prevista_devolucao, status)
-VALUES (
-    1,  -- ID de um livro que existe
-    '12345678901',  -- CPF de um usuário que existe
-    NOW(),
-    DATE_ADD(NOW(), INTERVAL 14 DAY),
-    'aguardando_retirada'
-);
-*/
-
--- 4. Verificar se o enum está correto
-SHOW COLUMNS FROM emprestimos LIKE 'status';
-
--- 5. Se precisar atualizar um empréstimo ativo para aguardando (para teste)
--- Descomente a linha abaixo e ajuste o ID:
--- UPDATE emprestimos SET status = 'aguardando_retirada' WHERE id = 1;

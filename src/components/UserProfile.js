@@ -15,6 +15,7 @@ export async function renderUserProfile(container) {
         
         if (response.ok) {
             user = await response.json();
+            console.log('✅ Usuário carregado:', user.nome);
         } else if (response.status === 401) {
             alert('Sessão expirada. Faça login novamente.');
             navigateTo('login');
@@ -25,16 +26,21 @@ export async function renderUserProfile(container) {
             return;
         }
 
-        // Buscar conquistas
+        // Buscar conquistas - CORRIGIDO
+        console.log('🔍 Buscando conquistas...');
         const conquistasResponse = await fetch('http://localhost:3000/api/user/achievements', {
             credentials: 'include'
         });
         
         if (conquistasResponse.ok) {
             conquistas = await conquistasResponse.json();
+            console.log('✅ Conquistas carregadas:', conquistas.length, 'total');
+            console.log('🏆 Desbloqueadas:', conquistas.filter(c => c.desbloqueada).length);
+        } else {
+            console.error('❌ Erro ao carregar conquistas:', conquistasResponse.status);
         }
     } catch (error) {
-        console.error('Erro ao carregar perfil:', error);
+        console.error('❌ Erro ao carregar perfil:', error);
         alert('Não foi possível carregar o perfil. Verifique a conexão com o servidor.');
         return;
     }
@@ -45,7 +51,6 @@ export async function renderUserProfile(container) {
     const bioTexto = user.bio || 'Ainda não tem uma biografia';
     const dataCadastro = user.data_cadastro ? new Date(user.data_cadastro).toLocaleDateString('pt-BR') : 'Não informado';
 
-    // Separar conquistas desbloqueadas e bloqueadas
     const conquistasDesbloqueadas = conquistas.filter(c => c.desbloqueada);
     const conquistasBloqueadas = conquistas.filter(c => !c.desbloqueada);
 
@@ -99,6 +104,28 @@ export async function renderUserProfile(container) {
                 transform: scale(1.05);
             }
 
+            .avatar-edit::after {
+                content: '📷';
+                position: absolute;
+                bottom: 5px;
+                right: 5px;
+                background: rgba(0,0,0,0.7);
+                color: white;
+                border-radius: 50%;
+                width: 30px;
+                height: 30px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 14px;
+                opacity: 0;
+                transition: opacity 0.3s;
+            }
+
+            .avatar-edit:hover::after {
+                opacity: 1;
+            }
+
             .profile-avatar {
                 width: 100%;
                 height: 100%;
@@ -110,9 +137,6 @@ export async function renderUserProfile(container) {
 
             #avatar-input {
                 display: none !important;
-                position: absolute;
-                opacity: 0;
-                pointer-events: none;
             }
 
             .bio-textarea {
@@ -126,7 +150,7 @@ export async function renderUserProfile(container) {
                 font-size: 14px;
                 resize: vertical;
                 box-sizing: border-box;
-                background: var(--branco);
+                background: white;
             }
             
             .bio-save-btn {
@@ -246,28 +270,8 @@ export async function renderUserProfile(container) {
                 font-size: 48px;
                 font-weight: bold;
                 text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
-                position: relative;
             }
 
-            .stat-item p::after {
-                content: '';
-                position: absolute;
-                top: -10px;
-                left: 50%;
-                transform: translateX(-50%);
-                width: 60%;
-                height: 3px;
-                background: linear-gradient(90deg, transparent, #9bb4ff, transparent);
-                border-radius: 2px;
-                opacity: 0;
-                transition: opacity 0.3s ease;
-            }
-
-            .stat-item:hover p::after {
-                opacity: 1;
-            }
-
-            /* Seção de Conquistas */
             .achievements-section {
                 padding: 20px;
                 margin: 20px;
@@ -289,6 +293,7 @@ export async function renderUserProfile(container) {
                 justify-content: center;
                 gap: 10px;
                 margin-bottom: 20px;
+                flex-wrap: wrap;
             }
 
             .achievement-tab {
@@ -322,6 +327,7 @@ export async function renderUserProfile(container) {
                 transition: all 0.3s ease;
                 position: relative;
                 overflow: hidden;
+                display: block;
             }
 
             .achievement-card.unlocked {
@@ -350,6 +356,7 @@ export async function renderUserProfile(container) {
                 font-size: 14px;
                 color: #434E70;
                 margin-bottom: 5px;
+                font-weight: bold;
             }
 
             .achievement-description {
@@ -371,6 +378,7 @@ export async function renderUserProfile(container) {
                 align-items: center;
                 justify-content: center;
                 font-size: 14px;
+                font-weight: bold;
             }
 
             .achievements-progress {
@@ -406,6 +414,7 @@ export async function renderUserProfile(container) {
                 color: white;
                 font-size: 12px;
                 font-weight: bold;
+                min-width: 30px;
             }
 
             .profile-footer {
@@ -437,42 +446,37 @@ export async function renderUserProfile(container) {
                 background-color: #c82333;
             }
 
-            .loading-spinner {
-                display: inline-block;
-                width: 20px;
-                height: 20px;
-                border: 3px solid #f3f3f3;
-                border-top: 3px solid #9bb4ff;
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-                margin-right: 8px;
+            .success-message, .error-message, .info-message {
+                border-radius: 8px;
+                padding: 15px;
+                margin: 15px 20px;
+                text-align: center;
+                font-size: 14px;
+                font-weight: bold;
+                animation: slideIn 0.3s ease;
             }
 
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
+            @keyframes slideIn {
+                from { opacity: 0; transform: translateY(-10px); }
+                to { opacity: 1; transform: translateY(0); }
             }
 
             .success-message {
                 background-color: #d4edda;
                 color: #155724;
-                border: 1px solid #c3e6cb;
-                border-radius: 8px;
-                padding: 10px;
-                margin-top: 10px;
-                text-align: center;
-                font-size: 14px;
+                border: 2px solid #c3e6cb;
             }
 
             .error-message {
                 background-color: #f8d7da;
                 color: #721c24;
-                border: 1px solid #f5c6cb;
-                border-radius: 8px;
-                padding: 10px;
-                margin-top: 10px;
-                text-align: center;
-                font-size: 14px;
+                border: 2px solid #f5c6cb;
+            }
+
+            .info-message {
+                background-color: #d1ecf1;
+                color: #0c5460;
+                border: 2px solid #bee5eb;
             }
 
             @media (max-width: 768px) {
@@ -507,8 +511,7 @@ export async function renderUserProfile(container) {
                 
                 <input type="file" 
                        id="avatar-input" 
-                       accept="image/*" 
-                       style="display:none"/>
+                       accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"/>
             </div>
     
             <div class="profile-info centro" id="bioContainer">
@@ -522,7 +525,7 @@ export async function renderUserProfile(container) {
     
             <div class="profile-stats">
                 <div class="stat-item">
-                    <h3>📚 Livros lidos</h3>
+                    <h3>Livros lidos</h3>
                     <p>${livrosLidos}</p>
                 </div>
             </div>
@@ -530,39 +533,47 @@ export async function renderUserProfile(container) {
             <div class="achievements-section">
                 <h3>🏆 Conquistas</h3>
                 
-                <div class="achievements-progress">
-                    <div class="progress-text">
-                        ${conquistasDesbloqueadas.length} de ${conquistas.length} conquistas desbloqueadas
-                    </div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar-fill" style="width: ${conquistas.length > 0 ? (conquistasDesbloqueadas.length / conquistas.length * 100) : 0}%">
-                            ${conquistas.length > 0 ? Math.round(conquistasDesbloqueadas.length / conquistas.length * 100) : 0}%
+                ${conquistas.length > 0 ? `
+                    <div class="achievements-progress">
+                        <div class="progress-text">
+                            ${conquistasDesbloqueadas.length} de ${conquistas.length} conquistas desbloqueadas
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" style="width: ${Math.round((conquistasDesbloqueadas.length / conquistas.length) * 100)}%">
+                                ${Math.round((conquistasDesbloqueadas.length / conquistas.length) * 100)}%
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="achievements-tabs">
-                    <button class="achievement-tab active" data-tab="all">
-                        Todas (${conquistas.length})
-                    </button>
-                    <button class="achievement-tab" data-tab="unlocked">
-                        Desbloqueadas (${conquistasDesbloqueadas.length})
-                    </button>
-                    <button class="achievement-tab" data-tab="locked">
-                        Bloqueadas (${conquistasBloqueadas.length})
-                    </button>
-                </div>
+                    <div class="achievements-tabs">
+                        <button class="achievement-tab active" data-tab="all">
+                            Todas (${conquistas.length})
+                        </button>
+                        <button class="achievement-tab" data-tab="unlocked">
+                            Desbloqueadas (${conquistasDesbloqueadas.length})
+                        </button>
+                        <button class="achievement-tab" data-tab="locked">
+                            Bloqueadas (${conquistasBloqueadas.length})
+                        </button>
+                    </div>
 
-                <div class="achievements-grid" id="achievements-grid">
-                    ${conquistas.map(conquista => `
-                        <div class="achievement-card ${conquista.desbloqueada ? 'unlocked' : 'locked'}" data-type="${conquista.desbloqueada ? 'unlocked' : 'locked'}">
-                            ${conquista.desbloqueada ? '<div class="achievement-badge">✓</div>' : ''}
-                            <div class="achievement-icon">${conquista.icone}</div>
-                            <div class="achievement-name">${conquista.nome}</div>
-                            <div class="achievement-description">${conquista.descricao}</div>
-                        </div>
-                    `).join('')}
-                </div>
+                    <div class="achievements-grid" id="achievements-grid">
+                        ${conquistas.map(conquista => `
+                            <div class="achievement-card ${conquista.desbloqueada ? 'unlocked' : 'locked'}" 
+                                 data-type="${conquista.desbloqueada ? 'unlocked' : 'locked'}"
+                                 title="${conquista.descricao}">
+                                ${conquista.desbloqueada ? '<div class="achievement-badge">✓</div>' : ''}
+                                <div class="achievement-icon">${conquista.icone || '🏆'}</div>
+                                <div class="achievement-name">${conquista.nome || 'Conquista'}</div>
+                                <div class="achievement-description">${conquista.descricao || 'Sem descrição'}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : `
+                    <p style="text-align: center; color: #6c757d; padding: 40px;">
+                        Nenhuma conquista disponível no momento.
+                    </p>
+                `}
             </div>
     
             <div class="profile-footer">
@@ -587,191 +598,194 @@ function setupEventListeners(user, container, conquistas) {
     // Sistema de tabs de conquistas
     const tabs = container.querySelectorAll('.achievement-tab');
     const achievementsGrid = container.querySelector('#achievements-grid');
-    const achievementCards = achievementsGrid.querySelectorAll('.achievement-card');
 
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            tabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
+    if (tabs.length > 0 && achievementsGrid) {
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
 
-            const filter = tab.dataset.tab;
-            
-            achievementCards.forEach(card => {
-                if (filter === 'all') {
-                    card.style.display = 'block';
-                } else {
-                    card.style.display = card.dataset.type === filter ? 'block' : 'none';
-                }
+                const filter = tab.dataset.tab;
+                const cards = achievementsGrid.querySelectorAll('.achievement-card');
+                
+                cards.forEach(card => {
+                    if (filter === 'all') {
+                        card.style.display = 'block';
+                    } else if (filter === card.dataset.type) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
             });
         });
-    });
+    }
 
-    // Handler para upload de avatar
-    avatarInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    // Upload de avatar - CORRIGIDO
+    if (avatarInput && avatarImg) {
+        avatarInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        const maxSize = 5 * 1024 * 1024;
-        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-        
-        if (!allowedTypes.includes(file.type)) {
-            showMessage('Por favor, selecione uma imagem válida (JPEG, PNG, GIF ou WebP).', 'error');
-            return;
-        }
+            console.log('📤 Iniciando upload de avatar');
+            console.log('Arquivo:', file.name, 'Tipo:', file.type, 'Tamanho:', (file.size / 1024).toFixed(2), 'KB');
 
-        if (file.size > maxSize) {
-            showMessage('A imagem deve ter no máximo 5MB.', 'error');
-            return;
-        }
-
-        showLoadingState(avatarImg, true);
-
-        const reader = new FileReader();
-        reader.onload = async function(event) {
-            const newAvatar = event.target.result;
-
-            try {
-                const response = await fetch('http://localhost:3000/api/profile/avatar', {
-                    method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json' 
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify({ avatarUrl: newAvatar })
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    avatarImg.src = newAvatar;
-                    
-                    const headerAvatar = document.querySelector('.shell-header .avatar');
-                    if (headerAvatar) {
-                        headerAvatar.src = newAvatar;
-                    }
-                    
-                    showMessage('Avatar atualizado com sucesso!', 'success');
-                } else {
-                    throw new Error(result.error || result.message || 'Erro ao atualizar avatar');
-                }
-            } catch (error) {
-                console.error('Erro ao atualizar avatar:', error);
-                showMessage(`Erro ao atualizar avatar: ${error.message}`, 'error');
-                avatarImg.src = user.avatar_url || 'https://i.pravatar.cc/150?img=12';
-            } finally {
-                showLoadingState(avatarImg, false);
-            }
-        };
-
-        reader.onerror = function() {
-            showLoadingState(avatarImg, false);
-            showMessage('Erro ao processar a imagem.', 'error');
-        };
-
-        reader.readAsDataURL(file);
-    });
-
-    // Handler para edição de biografia
-    bioText.addEventListener('click', () => {
-        if (bioContainer.querySelector('textarea')) return;
-
-        const currentBio = bioText.textContent.trim() === 'Ainda não tem uma biografia' ? '' : bioText.textContent.trim();
-        
-        bioContainer.innerHTML = `
-            <h2>${user.nome}</h2>
-            <textarea id="bioTextarea" 
-                      class="bio-textarea" 
-                      placeholder="Escreva algo sobre você..."
-                      maxlength="500">${currentBio}</textarea>
-            <div style="text-align: center;">
-                <button id="saveBioBtn" class="bio-save-btn">✔ Salvar</button>
-                <button id="cancelBioBtn" class="bio-cancel-btn">✖ Cancelar</button>
-            </div>
-            <div id="bioMessage"></div>
-        `;
-
-        const bioTextarea = document.getElementById('bioTextarea');
-        const saveBioBtn = document.getElementById('saveBioBtn');
-        const cancelBioBtn = document.getElementById('cancelBioBtn');
-
-        bioTextarea.focus();
-
-        saveBioBtn.addEventListener('click', async () => {
-            const newBio = bioTextarea.value.trim();
+            // Validações
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
             
-            if (newBio.length > 500) {
-                showBioMessage('A biografia deve ter no máximo 500 caracteres.', 'error');
+            if (!allowedTypes.includes(file.type)) {
+                showMessage(`❌ Formato não suportado: ${file.type}. Use JPEG, PNG, GIF ou WebP.`, 'error');
+                avatarInput.value = '';
                 return;
             }
 
-            showLoadingState(saveBioBtn, true);
-
-            try {
-                const response = await fetch('http://localhost:3000/api/profile/bio', {
-                    method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json' 
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify({ bio: newBio })
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    user.bio = result.bio;
-                    
-                    bioContainer.innerHTML = `
-                        <h2>${user.nome}</h2>
-                        <p id="bioText" title="Clique para editar sua biografia">
-                            ${result.bio || 'Ainda não tem uma biografia'}
-                        </p>
-                    `;
-                    
-                    const newBioText = document.getElementById('bioText');
-                    newBioText.addEventListener('click', () => {
-                        bioText.click();
-                    });
-                    
-                    showMessage('Biografia atualizada com sucesso!', 'success');
-                } else {
-                    throw new Error(result.error || result.message || 'Erro ao salvar biografia');
-                }
-            } catch (error) {
-                console.error('Erro ao salvar biografia:', error);
-                showBioMessage(`Erro ao salvar biografia: ${error.message}`, 'error');
-            } finally {
-                showLoadingState(saveBioBtn, false);
+            if (file.size > maxSize) {
+                showMessage(`❌ Imagem muito grande (${(file.size / 1024 / 1024).toFixed(2)}MB). Máximo: 5MB.`, 'error');
+                avatarInput.value = '';
+                return;
             }
-        });
 
-        cancelBioBtn.addEventListener('click', () => {
+            // Preview temporário
+            const tempUrl = URL.createObjectURL(file);
+            const oldSrc = avatarImg.src;
+            avatarImg.src = tempUrl;
+
+            const reader = new FileReader();
+            
+            reader.onload = async function(event) {
+                const base64Image = event.target.result;
+                
+                console.log('✅ Base64 gerado:', (base64Image.length / 1024).toFixed(2), 'KB');
+
+                try {
+                    const loadingMsg = showMessage('⏳ Enviando imagem...', 'info');
+                    
+                    const response = await fetch('http://localhost:3000/api/profile/avatar', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ avatarUrl: base64Image })
+                    });
+
+                    if (loadingMsg) loadingMsg.remove();
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        avatarImg.src = base64Image;
+                        user.avatar_url = base64Image;
+                        showMessage('✅ Avatar atualizado com sucesso!', 'success');
+                        console.log('✅ Avatar salvo no banco de dados');
+                    } else {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Erro ao atualizar avatar');
+                    }
+                } catch (error) {
+                    console.error('❌ Erro no upload:', error);
+                    avatarImg.src = oldSrc;
+                    showMessage(`❌ ${error.message}`, 'error');
+                } finally {
+                    avatarInput.value = '';
+                    URL.revokeObjectURL(tempUrl);
+                }
+            };
+
+            reader.onerror = function() {
+                console.error('❌ Erro ao ler arquivo');
+                avatarImg.src = oldSrc;
+                showMessage('❌ Erro ao processar a imagem. Tente outro arquivo.', 'error');
+                avatarInput.value = '';
+                URL.revokeObjectURL(tempUrl);
+            };
+
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Edição de biografia
+    if (bioText) {
+        bioText.addEventListener('click', () => {
+            if (bioContainer.querySelector('textarea')) return;
+
+            const currentBio = bioText.textContent.trim() === 'Ainda não tem uma biografia' ? '' : bioText.textContent.trim();
+            
             bioContainer.innerHTML = `
                 <h2>${user.nome}</h2>
-                <p id="bioText" title="Clique para editar sua biografia">
-                    ${user.bio || 'Ainda não tem uma biografia'}
-                </p>
+                <textarea id="bioTextarea" 
+                          class="bio-textarea" 
+                          placeholder="Escreva algo sobre você..."
+                          maxlength="500">${currentBio}</textarea>
+                <div style="text-align: center;">
+                    <button id="saveBioBtn" class="bio-save-btn">Salvar</button>
+                    <button id="cancelBioBtn" class="bio-cancel-btn">Cancelar</button>
+                </div>
             `;
-            
-            const newBioText = document.getElementById('bioText');
-            newBioText.addEventListener('click', () => {
-                bioText.click();
+
+            const bioTextarea = document.getElementById('bioTextarea');
+            const saveBioBtn = document.getElementById('saveBioBtn');
+            const cancelBioBtn = document.getElementById('cancelBioBtn');
+
+            bioTextarea.focus();
+
+            saveBioBtn.addEventListener('click', async () => {
+                const newBio = bioTextarea.value.trim();
+                
+                if (newBio.length > 500) {
+                    showMessage('❌ A biografia deve ter no máximo 500 caracteres.', 'error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('http://localhost:3000/api/profile/bio', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ bio: newBio })
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        user.bio = result.bio;
+                        
+                        bioContainer.innerHTML = `
+                            <h2>${user.nome}</h2>
+                            <p id="bioText" title="Clique para editar sua biografia">
+                                ${result.bio || 'Ainda não tem uma biografia'}
+                            </p>
+                        `;
+                        
+                        const newBioText = document.getElementById('bioText');
+                        newBioText.addEventListener('click', () => setupEventListeners(user, container, conquistas));
+                        
+                        showMessage('✅ Biografia atualizada com sucesso!', 'success');
+                    } else {
+                        throw new Error(result.error || 'Erro ao salvar biografia');
+                    }
+                } catch (error) {
+                    console.error('Erro ao salvar biografia:', error);
+                    showMessage(`❌ ${error.message}`, 'error');
+                }
+            });
+
+            cancelBioBtn.addEventListener('click', () => {
+                bioContainer.innerHTML = `
+                    <h2>${user.nome}</h2>
+                    <p id="bioText" title="Clique para editar sua biografia">
+                        ${user.bio || 'Ainda não tem uma biografia'}
+                    </p>
+                `;
+                
+                const newBioText = document.getElementById('bioText');
+                newBioText.addEventListener('click', () => setupEventListeners(user, container, conquistas));
             });
         });
+    }
 
-        bioTextarea.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'Enter') {
-                saveBioBtn.click();
-            }
-        });
-    });
-
-    // Handler para logout
+    // Logout
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
             if (!confirm('Tem certeza que deseja sair?')) return;
-
-            showLoadingState(logoutBtn, true);
 
             try {
                 const response = await fetch('http://localhost:3000/api/logout', { 
@@ -782,77 +796,42 @@ function setupEventListeners(user, container, conquistas) {
                 if (response.ok) {
                     localStorage.removeItem('user');
                     sessionStorage.clear();
-                    showMessage('Logout realizado com sucesso!', 'success');
-                    
-                    setTimeout(() => {
-                        navigateTo('login');
-                    }, 1500);
+                    navigateTo('login');
                 } else {
                     throw new Error('Erro no logout');
                 }
             } catch (error) {
                 console.error('Erro ao fazer logout:', error);
-                showMessage('Erro ao fazer logout. Tentando novamente...', 'error');
-                
-                setTimeout(() => {
-                    localStorage.removeItem('user');
-                    sessionStorage.clear();
-                    navigateTo('login');
-                }, 2000);
-            } finally {
-                showLoadingState(logoutBtn, false);
+                localStorage.removeItem('user');
+                sessionStorage.clear();
+                navigateTo('login');
             }
         });
     }
 }
 
 function showMessage(message, type = 'success') {
-    const existingMessages = document.querySelectorAll('.success-message, .error-message');
+    // Remover mensagens anteriores
+    const existingMessages = document.querySelectorAll('.success-message, .error-message, .info-message');
     existingMessages.forEach(msg => msg.remove());
 
     const messageDiv = document.createElement('div');
-    messageDiv.className = type === 'success' ? 'success-message' : 'error-message';
+    messageDiv.className = type === 'success' ? 'success-message' : 
+                          type === 'info' ? 'info-message' : 
+                          'error-message';
     messageDiv.textContent = message;
     
     const profileFooter = document.querySelector('.profile-footer');
-    profileFooter.insertBefore(messageDiv, profileFooter.firstChild);
+    if (profileFooter) {
+        profileFooter.insertBefore(messageDiv, profileFooter.firstChild);
 
-    setTimeout(() => {
-        if (messageDiv.parentNode) {
-            messageDiv.remove();
-        }
-    }, 5000);
-}
-
-function showBioMessage(message, type = 'success') {
-    const messageContainer = document.getElementById('bioMessage');
-    if (!messageContainer) return;
-
-    messageContainer.innerHTML = `
-        <div class="${type === 'success' ? 'success-message' : 'error-message'}">
-            ${message}
-        </div>
-    `;
-
-    setTimeout(() => {
-        messageContainer.innerHTML = '';
-    }, 5000);
-}
-
-function showLoadingState(element, isLoading) {
-    if (!element) return;
-
-    if (isLoading) {
-        element.disabled = true;
-        const originalText = element.textContent;
-        element.setAttribute('data-original-text', originalText);
-        element.innerHTML = '<span class="loading-spinner"></span>Carregando...';
-    } else {
-        element.disabled = false;
-        const originalText = element.getAttribute('data-original-text');
-        if (originalText) {
-            element.textContent = originalText;
-            element.removeAttribute('data-original-text');
-        }
+        setTimeout(() => {
+            if (messageDiv.parentNode) {
+                messageDiv.style.opacity = '0';
+                setTimeout(() => messageDiv.remove(), 300);
+            }
+        }, 5000);
+        
+        return messageDiv;
     }
 }
