@@ -394,12 +394,25 @@ function setupShellEventListeners(user, isAdmin) {
 
 // Função utilitária para atualizar avatar no shell
 export function updateShellAvatar(newAvatarUrl) {
+    console.log('🔄 Atualizando avatar no shell:', newAvatarUrl.substring(0, 50) + '...');
+    
+    // Atualizar TODOS os avatares na página
     const avatarElements = document.querySelectorAll('.avatar, .menu-header img');
+    
     avatarElements.forEach(img => {
         if (img) {
+            console.log('✅ Avatar atualizado:', img.className || img.alt);
             img.src = newAvatarUrl;
+            
+            // Forçar recarregamento
+            img.onerror = () => {
+                console.warn('⚠️ Erro ao carregar avatar, usando fallback');
+                img.src = 'https://i.pravatar.cc/150?img=12';
+            };
         }
     });
+    
+    console.log(`✅ ${avatarElements.length} elementos de avatar atualizados`);
 }
 
 // Função utilitária para atualizar nome do usuário no shell

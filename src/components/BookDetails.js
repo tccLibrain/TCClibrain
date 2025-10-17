@@ -99,7 +99,7 @@ export async function renderBookDetails(container, bookId) {
             const isLoanedToUser = book.emprestadoPara === currentUser.cpf;
             const isUserInQueue = book.queue && book.queue.includes(currentUser.cpf);
             
-            // NOVO: Verificar se tem solicitação aguardando
+            // Verificar status de empréstimo para este livro
             let hasPendingRequest = false;
             let hasPendingReturn = false;
             
@@ -107,40 +107,60 @@ export async function renderBookDetails(container, bookId) {
                 const dashboardResponse = await fetch('http://localhost:3000/api/user/dashboard', {
                     credentials: 'include'
                 });
+                
                 if (dashboardResponse.ok) {
                     const dashboardData = await dashboardResponse.json();
                     
+                    console.log('📊 DADOS DO DASHBOARD:', dashboardData);
+                    console.log('📚 Empréstimos:', dashboardData.emprestados);
+                    console.log('🔄 Devoluções pendentes:', dashboardData.devolucoesPendentes);
+                    
                     // Verificar empréstimos aguardando retirada
                     hasPendingRequest = dashboardData.emprestados?.some(
-                        emp => emp.bookId === parseInt(validBookId) && emp.status === 'aguardando_retirada'
+                        emp => {
+                            console.log(`Verificando empréstimo: bookId=${emp.bookId}, status=${emp.status}, buscando=${parseInt(validBookId)}`);
+                            return emp.bookId === parseInt(validBookId) && emp.status === 'aguardando_retirada';
+                        }
                     );
                     
                     // Verificar devoluções pendentes
                     hasPendingReturn = dashboardData.devolucoesPendentes?.some(
-                        dev => dev.bookId === parseInt(validBookId)
+                        dev => {
+                            console.log(`Verificando devolução: bookId=${dev.bookId}, buscando=${parseInt(validBookId)}`);
+                            return dev.bookId === parseInt(validBookId);
+                        }
                     );
+                    
+                    console.log('📋 Status do usuário para este livro:');
+                    console.log('- Aguardando retirada:', hasPendingRequest);
+                    console.log('- Aguardando devolução:', hasPendingReturn);
                 }
             } catch (error) {
                 console.log('Erro ao verificar status:', error);
             }
             
+            // Montar HTML baseado no status
             if (hasPendingRequest) {
                 actionButtonHtml = `
                     <div class="status-aguardando">
-                        <p>⏳ <strong>Aguardando Aprovação</strong></p>
-                        <p style="font-size: 14px; color: #6c757d;">
-                            Seu empréstimo foi solicitado e está aguardando aprovação do bibliotecário.
-                        </p>
-                        <button id="cancelarSolicitacaoBtn" class="btn btn-secondary">Cancelar Solicitação</button>
+                        <div class="status-icon">📚</div>
+                        <div class="status-title">Empréstimo Aguardando Aprovação</div>
+                        <div class="status-message">
+                            Você solicitou o empréstimo deste livro.<br>
+                            Aguardando confirmação do bibliotecário.
+                        </div>
+                        <button id="cancelarSolicitacaoBtn" class="btn btn-secondary" style="margin-top: 15px;">Cancelar Solicitação</button>
                     </div>
                 `;
             } else if (hasPendingReturn) {
                 actionButtonHtml = `
                     <div class="status-aguardando">
-                        <p>⏳ <strong>Devolução Aguardando Aprovação</strong></p>
-                        <p style="font-size: 14px; color: #6c757d;">
-                            Sua devolução foi solicitada e está aguardando confirmação do bibliotecário.
-                        </p>
+                        <div class="status-icon">📖</div>
+                        <div class="status-title">Devolução Aguardando Aprovação</div>
+                        <div class="status-message">
+                            Você solicitou a devolução deste livro.<br>
+                            Aguardando confirmação do bibliotecário.
+                        </div>
                     </div>
                 `;
             } else if (isLoanedToUser) {
@@ -165,7 +185,9 @@ export async function renderBookDetails(container, bookId) {
             actionButtonHtml = '<p style="color: var(--azul-claro);">Faça login para solicitar empréstimos</p>';
         }
 
-        const imageUrl = book.cover || createPlaceholderImage(book.title);
+        const imageUrl = book.cover && book.cover.startsWith('http') 
+            ? book.cover 
+            : createPlaceholderImage(book.title || 'Livro');
 
         container.innerHTML = `
             <style>
@@ -182,9 +204,10 @@ export async function renderBookDetails(container, bookId) {
                 .btn-success:hover { background-color: #218838; }
                 .btn-secondary { background-color: #6c757d; color: white; }
                 .btn-secondary:hover { background-color: #5a6268; }
-                .status-aguardando { background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); border: 2px solid #ffc107; border-radius: 12px; padding: 20px; margin: 15px 0; text-align: center; }
-                .status-aguardando p { margin: 8px 0; color: #856404; }
-                .status-aguardando strong { font-size: 18px; color: #664d03; }
+                .status-aguardando { background: #fff3cd; border: 3px solid #ffc107; border-radius: 12px; padding: 25px 20px; margin: 15px 0; text-align: center; box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2); }
+                .status-aguardando .status-icon { font-size: 24px; margin-bottom: 10px; }
+                .status-aguardando .status-title { font-size: 18px; font-weight: bold; color: #856404; margin: 10px 0; }
+                .status-aguardando .status-message { font-size: 14px; color: #856404; margin: 10px 0; line-height: 1.5; }
                 .synopsis-section { background: var(--branco); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
                 .synopsis-section #synopsis { margin-top: 15px; line-height: 1.6; color: var(--azul-claro); }
                 .hidden { display: none; }
@@ -438,7 +461,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         });
     }
 
-    // Cancelar solicitação de empréstimo (NOVO)
+    // Cancelar solicitação de empréstimo
     const cancelarSolicitacaoBtn = container.querySelector('#cancelarSolicitacaoBtn');
     if (cancelarSolicitacaoBtn) {
         cancelarSolicitacaoBtn.addEventListener('click', async () => {
@@ -477,7 +500,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
             if (!confirm('Deseja cancelar esta reserva?')) return;
             cancelarReservaBtn.disabled = true;
             try {
-                const res = await fetch('http://localhost:3000/api/loan/cancel-request', {
+                const res = await fetch('http://localhost:3000/api/loan/cancel-reserve', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',

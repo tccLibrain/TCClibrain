@@ -7,6 +7,8 @@ import { renderBookDetails } from './components/BookDetails.js';
 import { renderUserRegistration } from './components/UserRegistration.js';
 import { createShell } from './components/MenuHeaderFooter.js';
 import { renderShelves } from './components/Shelves.js';
+import { renderForgotPasswordPage } from './components/ForgotPassword.js';
+import { renderResetPasswordPage } from './components/ResetPassword.js';
 
 const app = document.getElementById('app');
 
@@ -48,7 +50,7 @@ export async function initApp() {
     const user = await checkAuthStatus();
     
     // Rotas que não precisam de autenticação
-    if (route === 'login' || route === 'register') {
+    if (route === 'login' || route === 'register' || route === 'forgot-password' || route === 'reset-password') {
         navigateTo(route);
         return;
     }
@@ -83,7 +85,7 @@ export async function navigateTo(screen, params = {}) {
     let user = params.user || currentUser;
     
     // Se não temos usuário e não é uma tela pública, verificar autenticação
-    if (!user && screen !== 'login' && screen !== 'register') {
+    if (!user && screen !== 'login' && screen !== 'register' && screen !== 'forgot-password' && screen !== 'reset-password') {
         user = await checkAuthStatus();
         if (!user) {
             console.log('Sessão expirada, redirecionando para login');
@@ -117,7 +119,9 @@ function updateBrowserURL(screen, params) {
     let url = '#';
     if (screen === 'details' && params.bookId) {
         url = `#details/${params.bookId}`;
-    } else if (screen !== 'login' && screen !== 'register') {
+    } else if (screen !== 'login' && screen !== 'register' && screen !== 'forgot-password' && screen !== 'reset-password') {
+        url = `#${screen}`;
+    } else {
         url = `#${screen}`;
     }
     
@@ -127,8 +131,8 @@ function updateBrowserURL(screen, params) {
 }
 
 async function setupContainer(screen, user) {
-    if (screen === 'login' || screen === 'register') {
-        // Para login/register, limpar toda a app
+    if (screen === 'login' || screen === 'register' || screen === 'forgot-password' || screen === 'reset-password') {
+        // Para login/register/forgot/reset, limpar toda a app
         app.innerHTML = '';
         return app;
     } else {
@@ -190,6 +194,14 @@ async function renderScreen(screen, container, params) {
         case 'shelves':
             await renderShelves(container);
             updateActiveFooterButton('shelves');
+            break;
+
+        case 'forgot-password':
+            renderForgotPasswordPage(container);
+            break;
+            
+        case 'reset-password':
+            renderResetPasswordPage(container, params);
             break;
             
         case 'admin':

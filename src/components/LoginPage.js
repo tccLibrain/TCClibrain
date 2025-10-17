@@ -105,9 +105,11 @@ export function renderLoginPage(container) {
       <button type="submit">Entrar</button>
     </form>
 
-    <div class='contaclasse'>
-      <p class='conta'>Ainda não fez cadastro?<a href="#" id="go-register" style='margin-left: 5px; color: #9bb4ff;'>Cadastre-se</a></p>
-    </div>
+
+<div class='contaclasse'>
+  <p class='conta'>Ainda não fez cadastro?<a href="#" id="go-register" style='margin-left: 5px; color: #9bb4ff;'>Cadastre-se</a></p>
+  <p class='conta'><a href="#" id="forgot-password" style='color: #9bb4ff;'>Esqueci minha senha</a></p>
+</div>
   `;
 
   const form = document.getElementById('login-form');
@@ -147,4 +149,12 @@ export function renderLoginPage(container) {
 
   const registerLink = document.getElementById('go-register');
   registerLink.onclick = (e) => { e.preventDefault(); navigateTo('register'); };
+
+  const forgotPasswordLink = document.getElementById('forgot-password');
+if (forgotPasswordLink) {
+  forgotPasswordLink.onclick = (e) => { 
+    e.preventDefault(); 
+    navigateTo('forgot-password'); 
+  };
+}
 }

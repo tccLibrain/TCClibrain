@@ -8,7 +8,52 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+
+const nodemailer = require('nodemailer');
+
+// Configurar transportador de email
+const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT) || 587,
+    secure: false, // true para 465, false para outras portas
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// Verificar configuração do email ao iniciar
+transporter.verify(function(error, success) {
+    if (error) {
+        console.error('❌ Erro na configuração do email:', error);
+        console.log('⚠️ Os emails NÃO serão enviados. Verifique as configurações no .env');
+    } else {
+        console.log('✅ Servidor de email configurado e pronto para enviar mensagens');
+    }
+});
+
+// Função auxiliar para enviar email
+async function enviarEmail(destinatario, assunto, html) {
+    try {
+        const info = await transporter.sendMail({
+            from: process.env.EMAIL_FROM || '"LibRain" <libraintcc@gmail.com>',
+            to: destinatario,
+            subject: assunto,
+            html: html
+        });
+        
+        console.log('✅ Email enviado com sucesso para:', destinatario);
+        console.log('📧 Message ID:', info.messageId);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error('❌ Erro ao enviar email:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// SEM LIMITE de tamanho no body
+app.use(express.json({ limit: 'Infinity' }));
+app.use(express.urlencoded({ limit: 'Infinity', extended: true }));
 
 // Configuração do CORS para permitir que o frontend envie cookies de sessão
 app.use(cors({
@@ -393,19 +438,8 @@ app.put('/api/profile/avatar', isAuthenticated, async (req, res) => {
         });
     }
     
-    // Verificar tamanho apenas para base64
-    if (avatarUrl.startsWith('data:image/')) {
-        const base64Size = Buffer.byteLength(avatarUrl, 'utf8');
-        const maxSize = 10 * 1024 * 1024; // 10MB
-        
-        if (base64Size > maxSize) {
-            console.log('Avatar muito grande:', base64Size);
-            return res.status(400).json({ 
-                error: 'Imagem muito grande. Máximo 10MB.',
-                size: `${(base64Size / 1024 / 1024).toFixed(2)}MB`
-            });
-        }
-    }
+    // REMOVIDO: Verificação de tamanho máximo
+    // Agora aceita qualquer tamanho (LONGTEXT suporta até 4GB)
     
     let connection;
     try {
@@ -436,10 +470,14 @@ app.put('/api/profile/avatar', isAuthenticated, async (req, res) => {
         console.error('Mensagem:', error.message);
         console.error('Código:', error.code);
         
-        if (error.code === 'ER_NET_PACKET_TOO_LARGE' || error.code === 'WARN_DATA_TRUNCATED') {
+        // CORREÇÃO: Mensagens de erro específicas
+        if (error.code === 'ER_NET_PACKET_TOO_LARGE') {
             res.status(413).json({ 
-                error: 'Imagem muito grande para o banco de dados.',
-                tip: 'Tente reduzir a qualidade ou tamanho da imagem'
+                error: 'Imagem muito grande para o banco de dados. Configure max_allowed_packet no MySQL.'
+            });
+        } else if (error.code === 'WARN_DATA_TRUNCATED') {
+            res.status(413).json({ 
+                error: 'Imagem truncada. Aumente o tamanho da coluna avatar_url.'
             });
         } else {
             res.status(500).json({ 
@@ -518,6 +556,8 @@ app.post('/api/logout', (req, res) => {
 // ================================
 // ROTAS DE LIVROS
 // ================================
+
+
 
 app.get('/api/books', async (req, res) => {
     console.log('=== DEBUG: Requisição para /api/books recebida ===');
@@ -623,8 +663,32 @@ app.get('/api/books/:id', async (req, res) => {
     } finally {
         if (connection) connection.release();
     }
+
 });
 
+app.get('/api/user/loan-history/:bookId', isAuthenticated, async (req, res) => {
+    const { bookId } = req.params;
+    const userCpf = req.session.user.cpf;
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        const [history] = await connection.execute(`
+            SELECT * FROM emprestimos 
+            WHERE bookId = ? AND cpf = ? AND status = 'devolvido'
+            ORDER BY data_real_devolucao DESC
+        `, [bookId, userCpf]);
+        
+        res.json(history);
+        
+    } catch (error) {
+        console.error('Erro ao buscar histórico:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
 
 // ================================
 // ROTAS DE EMPRÉSTIMO
@@ -709,7 +773,7 @@ app.post('/api/loan/request', isAuthenticated, async (req, res) => {
     }
 });
 
-// Adicione esta nova rota no server.js:
+
 app.post('/api/admin/confirm-pickup', isAuthenticated, isAdmin, async (req, res) => {
     const { bookId, cpf } = req.body;
     
@@ -837,6 +901,55 @@ app.post('/api/loan/request-return', isAuthenticated, async (req, res) => {
         
     } catch (error) {
         console.error('Erro ao solicitar devolução:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Cancelar reserva (fila de espera)
+app.post('/api/loan/cancel-reserve', isAuthenticated, async (req, res) => {
+    const { bookId } = req.body;
+    const userCpf = req.session.user.cpf;
+    
+    console.log('=== CANCELAR RESERVA ===');
+    console.log('BookId:', bookId, 'CPF:', userCpf);
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+        
+        // Deletar reserva
+        const [result] = await connection.execute(
+            'DELETE FROM reservas WHERE bookId = ? AND cpf = ? AND status = "aguardando"',
+            [bookId, userCpf]
+        );
+        
+        if (result.affectedRows === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Reserva não encontrada' });
+        }
+        
+        // Reordenar posições na fila
+        const [remainingQueue] = await connection.execute(
+            'SELECT id FROM reservas WHERE bookId = ? AND status = "aguardando" ORDER BY posicao ASC',
+            [bookId]
+        );
+        
+        for (let i = 0; i < remainingQueue.length; i++) {
+            await connection.execute(
+                'UPDATE reservas SET posicao = ? WHERE id = ?',
+                [i + 1, remainingQueue[i].id]
+            );
+        }
+        
+        await connection.commit();
+        res.json({ message: 'Reserva cancelada com sucesso!' });
+        
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('Erro ao cancelar reserva:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
@@ -1157,22 +1270,38 @@ app.delete('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
     const { reviewId } = req.params;
     const userCpf = req.session.user.cpf;
     
+    console.log('🗑️ DELETAR RESENHA:', reviewId, 'User CPF:', userCpf);
+    
     let connection;
     try {
         connection = await pool.getConnection();
         
-        // Verificar se a resenha pertence ao usuário
+        // Verificar se a resenha existe e pertence ao usuário
         const [review] = await connection.execute(
-            'SELECT * FROM resenhas WHERE id = ? AND cpf = ?',
-            [reviewId, userCpf]
+            'SELECT cpf FROM resenhas WHERE id = ?',
+            [reviewId]
         );
         
+        console.log('Review encontrada:', review);
+        
         if (review.length === 0) {
+            return res.status(404).json({ error: 'Resenha não encontrada' });
+        }
+        
+        // Comparar CPFs (convertendo ambos para string limpa)
+        const reviewCpf = cleanCPF(review[0].cpf);
+        const sessionCpf = cleanCPF(userCpf);
+        
+        console.log('Comparando CPFs - Review:', reviewCpf, 'Sessão:', sessionCpf);
+        
+        if (reviewCpf !== sessionCpf) {
             return res.status(403).json({ error: 'Você não tem permissão para excluir esta resenha' });
         }
         
+        // Deletar resenha
         await connection.execute('DELETE FROM resenhas WHERE id = ?', [reviewId]);
         
+        console.log('✅ Resenha deletada com sucesso');
         res.json({ message: 'Resenha excluída com sucesso!' });
         
     } catch (error) {
@@ -1183,104 +1312,6 @@ app.delete('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
     }
 });
 
-// ================================
-// SISTEMA DE CONQUISTAS
-// ================================
-
-app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
-    const userCpf = req.session.user.cpf;
-    
-    console.log('=== BUSCANDO CONQUISTAS ===');
-    console.log('CPF do usuário:', userCpf);
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // Buscar conquistas do usuário
-        const [userData] = await connection.execute(
-            'SELECT conquistas_desbloqueadas FROM usuarios WHERE cpf = ?',
-            [userCpf]
-        );
-        
-        console.log('Dados do usuário:', userData[0]);
-        
-        let conquistasDesbloqueadas = [];
-        
-        // Parse seguro do JSON
-        if (userData[0].conquistas_desbloqueadas) {
-            try {
-                // Se já for um array, usar diretamente
-                if (Array.isArray(userData[0].conquistas_desbloqueadas)) {
-                    conquistasDesbloqueadas = userData[0].conquistas_desbloqueadas;
-                } 
-                // Se for string JSON, parsear
-                else if (typeof userData[0].conquistas_desbloqueadas === 'string') {
-                    conquistasDesbloqueadas = JSON.parse(userData[0].conquistas_desbloqueadas);
-                }
-            } catch (e) {
-                console.log('Erro ao parsear conquistas, usando array vazio:', e.message);
-                conquistasDesbloqueadas = [];
-            }
-        }
-        
-        console.log('Conquistas desbloqueadas (IDs):', conquistasDesbloqueadas);
-        
-        // Buscar todas as conquistas disponíveis
-        const [allAchievements] = await connection.execute(
-            'SELECT * FROM conquistas_disponiveis WHERE ativa = TRUE ORDER BY ordem_exibicao'
-        );
-        
-        console.log('Total de conquistas disponíveis:', allAchievements.length);
-        
-        // Marcar quais estão desbloqueadas
-        const achievements = allAchievements.map(achievement => {
-            const desbloqueada = conquistasDesbloqueadas.includes(achievement.id);
-            return {
-                id: achievement.id,
-                nome: achievement.nome,
-                descricao: achievement.descricao,
-                icone: achievement.icone,
-                condicao_tipo: achievement.condicao_tipo,
-                condicao_valor: achievement.condicao_valor,
-                desbloqueada: desbloqueada
-            };
-        });
-        
-        console.log('Conquistas processadas:', achievements.length);
-        console.log('Desbloqueadas:', achievements.filter(a => a.desbloqueada).length);
-        
-        res.json(achievements);
-        
-    } catch (error) {
-        console.error('=== ERRO AO BUSCAR CONQUISTAS ===');
-        console.error('Mensagem:', error.message);
-        console.error('Stack:', error.stack);
-        res.status(500).json({ 
-            error: 'Erro interno do servidor',
-            details: error.message 
-        });
-    } finally {
-        if (connection) connection.release();
-    }
-});
-
-// Verificar conquistas automaticamente
-app.post('/api/user/check-achievements', isAuthenticated, async (req, res) => {
-    const userCpf = req.session.user.cpf;
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        await connection.execute('CALL VerificarConquistas(?)', [userCpf]);
-        res.json({ message: 'Conquistas verificadas!' });
-    } catch (error) {
-        console.error('Erro ao verificar conquistas:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
 
 
 // ================================
@@ -1496,7 +1527,7 @@ app.get('/api/user/dashboard', isAuthenticated, async (req, res) => {
                    DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as data_devolucao_formatada
             FROM emprestimos e
             JOIN livros l ON e.bookId = l.id
-            WHERE e.cpf = ? AND e.status = 'ativo'
+             WHERE e.cpf = ? AND e.status IN ('ativo', 'aguardando_retirada')
             ORDER BY e.data_prevista_devolucao ASC
         `, [userCpf]);
         
@@ -1536,42 +1567,6 @@ app.get('/api/user/dashboard', isAuthenticated, async (req, res) => {
 // ================================
 // CONQUISTAS DO USUÁRIO
 // ================================
-
-app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
-    const userCpf = req.session.user.cpf;
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // Buscar conquistas do usuário
-        const [userData] = await connection.execute(
-            'SELECT conquistas_desbloqueadas FROM usuarios WHERE cpf = ?',
-            [userCpf]
-        );
-        
-        const conquistasDesbloqueadas = userData[0].conquistas_desbloqueadas || [];
-        
-        // Buscar todas as conquistas disponíveis
-        const [allAchievements] = await connection.execute(
-            'SELECT * FROM conquistas_disponiveis WHERE ativa = TRUE ORDER BY ordem_exibicao'
-        );
-        
-        // Marcar quais estão desbloqueadas
-        const achievements = allAchievements.map(achievement => ({
-            ...achievement,
-            desbloqueada: conquistasDesbloqueadas.includes(achievement.id)
-        }));
-        
-        res.json(achievements);
-        
-    } catch (error) {
-        console.error('Erro ao buscar conquistas:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
 
 // Verificar e conceder conquistas
 app.post('/api/user/check-achievements', isAuthenticated, async (req, res) => {
@@ -1630,6 +1625,83 @@ app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
     } catch (error) {
         console.error('Erro ao buscar conquistas:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
+    const userCpf = req.session.user.cpf;
+    
+    console.log('=== BUSCANDO CONQUISTAS ===');
+    console.log('CPF do usuário:', userCpf);
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        // Buscar conquistas do usuário
+        const [userData] = await connection.execute(
+            'SELECT conquistas_desbloqueadas FROM usuarios WHERE cpf = ?',
+            [userCpf]
+        );
+        
+        console.log('Dados do usuário:', userData[0]);
+        
+        let conquistasDesbloqueadas = [];
+        
+        // Parse seguro do JSON
+        if (userData[0] && userData[0].conquistas_desbloqueadas) {
+            try {
+                // Se já for um array, usar diretamente
+                if (Array.isArray(userData[0].conquistas_desbloqueadas)) {
+                    conquistasDesbloqueadas = userData[0].conquistas_desbloqueadas;
+                } 
+                // Se for string JSON, parsear
+                else if (typeof userData[0].conquistas_desbloqueadas === 'string') {
+                    conquistasDesbloqueadas = JSON.parse(userData[0].conquistas_desbloqueadas);
+                }
+            } catch (e) {
+                console.log('Erro ao parsear conquistas, usando array vazio:', e.message);
+                conquistasDesbloqueadas = [];
+            }
+        }
+        
+        console.log('Conquistas desbloqueadas (IDs):', conquistasDesbloqueadas);
+        
+        // Buscar todas as conquistas disponíveis
+        const [allAchievements] = await connection.execute(
+            'SELECT * FROM conquistas_disponiveis WHERE ativa = TRUE ORDER BY ordem_exibicao'
+        );
+        
+        console.log('Total de conquistas disponíveis:', allAchievements.length);
+        
+        // Marcar quais estão desbloqueadas
+        const achievements = allAchievements.map(achievement => {
+            const desbloqueada = conquistasDesbloqueadas.includes(achievement.id);
+            return {
+                id: achievement.id,
+                nome: achievement.nome,
+                descricao: achievement.descricao,
+                icone: achievement.icone,
+                condicao_tipo: achievement.condicao_tipo,
+                condicao_valor: achievement.condicao_valor,
+                desbloqueada: desbloqueada
+            };
+        });
+        
+        console.log('Conquistas processadas:', achievements.length);
+        console.log('Desbloqueadas:', achievements.filter(a => a.desbloqueada).length);
+        
+        res.json(achievements);
+        
+    } catch (error) {
+        console.error('=== ERRO AO BUSCAR CONQUISTAS ===');
+        console.error('Mensagem:', error.message);
+        console.error('Stack:', error.stack);
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: error.message 
+        });
     } finally {
         if (connection) connection.release();
     }
@@ -1892,6 +1964,59 @@ app.post('/api/admin/add-admin', isAuthenticated, isAdmin, async (req, res) => {
     }
 });
 
+app.post('/api/admin/remove-admin', isAuthenticated, isAdmin, async (req, res) => {
+    const { cpf } = req.body;
+    
+    if (!cpf) {
+        return res.status(400).json({ error: 'CPF é obrigatório' });
+    }
+    
+    const cpfLimpo = cleanCPF(cpf);
+    const adminCpf = cleanCPF(req.session.user.cpf);
+    
+    // Impedir que o admin remova a si mesmo
+    if (cpfLimpo === adminCpf) {
+        return res.status(400).json({ error: 'Você não pode remover seus próprios privilégios de administrador!' });
+    }
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        // Verificar se o usuário é admin
+        const [user] = await connection.execute(
+            'SELECT tipo FROM usuarios WHERE cpf = ?',
+            [cpfLimpo]
+        );
+        
+        if (user.length === 0) {
+            return res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+        
+        if (user[0].tipo !== 'admin') {
+            return res.status(400).json({ error: 'Este usuário não é um administrador' });
+        }
+        
+        // Remover privilégios de admin
+        const [result] = await connection.execute(`
+            UPDATE usuarios 
+            SET tipo = 'leitor' 
+            WHERE cpf = ?
+        `, [cpfLimpo]);
+        
+        if (result.affectedRows > 0) {
+            res.status(200).json({ message: 'Privilégios de administrador removidos com sucesso!' });
+        } else {
+            res.status(404).json({ error: 'Erro ao remover privilégios' });
+        }
+        
+    } catch (error) {
+        console.error('Erro ao remover admin:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
 
 // Gerar relatório administrativo
 app.get('/api/admin/report', isAuthenticated, isAdmin, async (req, res) => {
@@ -1959,63 +2084,10 @@ app.get('/api/admin/report', isAuthenticated, isAdmin, async (req, res) => {
     }
 });
 
-// ROTA DE TESTE - ADICIONE ISSO
+
 app.post('/api/admin/test-route', (req, res) => {
     console.log('ROTA DE TESTE FUNCIONOU!');
     res.json({ message: 'Rota funcionando!' });
-});
-
-// Confirmar retirada de livro
-app.post('/api/admin/confirm-pickup', isAuthenticated, isAdmin, async (req, res) => {
-    const { bookId, cpf } = req.body;
-    
-    console.log('=== CONFIRMANDO RETIRADA ===');
-    console.log('BookId:', bookId, 'CPF:', cpf);
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        await connection.beginTransaction();
-        
-        // Buscar empréstimo aguardando retirada
-        const [emprestimo] = await connection.execute(
-            'SELECT * FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
-            [bookId, cpf]
-        );
-        
-        if (emprestimo.length === 0) {
-            await connection.rollback();
-            return res.status(404).json({ 
-                error: 'Empréstimo aguardando retirada não encontrado' 
-            });
-        }
-        
-        // Atualizar status para "ativo"
-        await connection.execute(
-            'UPDATE emprestimos SET status = "ativo" WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
-            [bookId, cpf]
-        );
-        
-        // Criar notificação
-        await connection.execute(
-            `INSERT INTO notificacoes (cpf, tipo, titulo, mensagem) 
-             VALUES (?, 'emprestimo', 'Retirada Confirmada ✓', 
-                     'Sua retirada foi confirmada. Aproveite a leitura! Devolva até o prazo.')`,
-            [cpf]
-        );
-        
-        console.log('✅ Retirada confirmada - Status atualizado para ativo');
-        
-        await connection.commit();
-        res.json({ message: 'Retirada confirmada com sucesso!' });
-        
-    } catch (error) {
-        if (connection) await connection.rollback();
-        console.error('Erro ao confirmar retirada:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
 });
 
 // Cancelar empréstimo expirado
@@ -2070,126 +2142,255 @@ app.post('/api/admin/cancel-expired-loan', isAuthenticated, isAdmin, async (req,
         if (connection) connection.release();
     }
 });
+// ================================
+// ROTAS DE RECUPERAÇÃO DE SENHA
+// ================================
 
-// Cancelar empréstimo expirado
-app.post('/api/admin/cancel-expired-loan', isAuthenticated, isAdmin, async (req, res) => {
-    const { bookId, cpf } = req.body;
+const crypto = require('crypto');
+
+// Rota: Solicitar recuperação de senha
+app.post('/api/forgot-password', async (req, res) => {
+    const { cpf } = req.body;
+    
+    console.log('=== SOLICITAÇÃO DE RECUPERAÇÃO DE SENHA ===');
+    console.log('CPF recebido:', cpf);
+    
+    if (!cpf) {
+        return res.status(400).json({ error: 'CPF é obrigatório' });
+    }
+    
+    const cpfLimpo = cleanCPF(cpf);
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        // Buscar usuário pelo CPF
+        const [users] = await connection.execute(
+            'SELECT id, nome, email, cpf FROM usuarios WHERE cpf = ?',
+            [cpfLimpo]
+        );
+        
+        // Por segurança, sempre retornar sucesso mesmo se o CPF não existir
+        if (users.length === 0) {
+            console.log('⚠️ Tentativa de recuperação para CPF não cadastrado:', cpfLimpo);
+            return res.json({ 
+                message: 'Se o CPF estiver cadastrado, você receberá um email com instruções.' 
+            });
+        }
+        
+        const user = users[0];
+        
+        // Gerar token único
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 3600000); // Token expira em 1 hora
+        
+        // Salvar token no banco de dados
+        await connection.execute(
+            'INSERT INTO password_reset_tokens (cpf, token, expira_em) VALUES (?, ?, ?)',
+            [cpfLimpo, token, expiresAt]
+        );
+        
+        // Criar link de recuperação
+        const resetLink = `http://localhost:5173/#reset-password?token=${token}`;
+        
+        // Montar HTML do email
+        const emailHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
+                    .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                    .header { background-color: #434E70; color: #ffffff; padding: 30px; text-align: center; }
+                    .content { padding: 30px; color: #333333; line-height: 1.6; }
+                    .button { display: inline-block; background-color: #9bb4ff; color: #ffffff !important; text-decoration: none; padding: 15px 30px; border-radius: 25px; font-weight: bold; margin: 20px 0; }
+                    .footer { background-color: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #6c757d; }
+                    .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>🔐 Recuperação de Senha</h1>
+                        <p>LibRain - Sistema de Biblioteca</p>
+                    </div>
+                    <div class="content">
+                        <p>Olá, <strong>${user.nome}</strong>!</p>
+                        <p>Recebemos uma solicitação para redefinir a senha da sua conta no LibRain.</p>
+                        <p>Clique no botão abaixo para criar uma nova senha:</p>
+                        <div style="text-align: center;">
+                            <a href="${resetLink}" class="button">Redefinir Minha Senha</a>
+                        </div>
+                        <div class="warning">
+                            <strong>⏰ Atenção:</strong> Este link expira em <strong>1 hora</strong>.
+                        </div>
+                        <p>Ou copie e cole este link no seu navegador:</p>
+                        <p style="word-break: break-all; background-color: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px;">
+                            ${resetLink}
+                        </p>
+                        <hr style="border: none; border-top: 1px solid #e9ecef; margin: 30px 0;">
+                        <p style="font-size: 14px; color: #6c757d;">
+                            <strong>Não solicitou esta alteração?</strong><br>
+                            Se você não fez esta solicitação, ignore este email. Sua senha permanecerá a mesma.
+                        </p>
+                    </div>
+                    <div class="footer">
+                        <p>Este é um email automático. Por favor, não responda.</p>
+                        <p>© ${new Date().getFullYear()} LibRain - Todos os direitos reservados</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+        
+        // Enviar email
+        console.log(`📧 Enviando email para: ${user.email}`);
+        const emailResult = await enviarEmail(
+            user.email,
+            '🔐 Recuperação de Senha - LibRain',
+            emailHtml
+        );
+        
+        if (emailResult.success) {
+            console.log('✅ Email enviado com sucesso!');
+            res.json({ 
+                message: 'Email de recuperação enviado com sucesso! Verifique sua caixa de entrada e spam.'
+            });
+        } else {
+            console.error('❌ Falha ao enviar email:', emailResult.error);
+            res.json({ 
+                message: 'Solicitação processada. Se o CPF estiver cadastrado, você receberá um email.'
+            });
+        }
+        
+    } catch (error) {
+        console.error('Erro ao processar recuperação:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Rota: Redefinir senha com token
+app.post('/api/reset-password', async (req, res) => {
+    const { token, novaSenha } = req.body;
+    
+    console.log('=== REDEFINIÇÃO DE SENHA ===');
+    
+    if (!token || !novaSenha) {
+        return res.status(400).json({ 
+            error: 'Token e nova senha são obrigatórios' 
+        });
+    }
+    
+    if (novaSenha.length < 6) {
+        return res.status(400).json({ 
+            error: 'A senha deve ter no mínimo 6 caracteres' 
+        });
+    }
     
     let connection;
     try {
         connection = await pool.getConnection();
         await connection.beginTransaction();
         
-        // Cancelar empréstimo
-        await connection.execute(
-            'DELETE FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = "ativo"',
-            [bookId, cpf]
+        // Buscar token válido
+        const [tokenData] = await connection.execute(
+            `SELECT cpf FROM password_reset_tokens 
+             WHERE token = ? AND usado = FALSE AND expira_em > NOW()`,
+            [token]
         );
         
-        // Disponibilizar livro novamente
-        await connection.execute(
-            'UPDATE livros SET disponivel = TRUE WHERE id = ?',
-            [bookId]
-        );
-        
-        // Notificar próximo na fila
-        const [nextInQueue] = await connection.execute(
-            'SELECT cpf FROM reservas WHERE bookId = ? AND status = "aguardando" ORDER BY posicao ASC LIMIT 1',
-            [bookId]
-        );
-        
-        if (nextInQueue.length > 0) {
-            const nextUserCpf = nextInQueue[0].cpf;
-            
-            await connection.execute(
-                'UPDATE reservas SET status = "notificado", data_notificacao = NOW() WHERE bookId = ? AND cpf = ?',
-                [bookId, nextUserCpf]
-            );
-            
-            await connection.execute(
-                'INSERT INTO notificacoes (cpf, tipo, titulo, mensagem) VALUES (?, "reserva", "Livro Disponível!", "O livro que você reservou está disponível para retirada.")',
-                [nextUserCpf]
-            );
+        if (tokenData.length === 0) {
+            await connection.rollback();
+            return res.status(400).json({ 
+                error: 'Token inválido ou expirado' 
+            });
         }
         
+        const cpf = tokenData[0].cpf;
+        
+        // Hash da nova senha
+        const salt = await bcrypt.genSalt(10);
+        const senhaHash = await bcrypt.hash(novaSenha, salt);
+        
+        // Atualizar senha
+        await connection.execute(
+            'UPDATE usuarios SET senha_hash = ?, data_atualizacao = NOW() WHERE cpf = ?',
+            [senhaHash, cpf]
+        );
+        
+        // Marcar token como usado
+        await connection.execute(
+            'UPDATE password_reset_tokens SET usado = TRUE WHERE token = ?',
+            [token]
+        );
+        
         await connection.commit();
-        res.json({ message: 'Empréstimo cancelado e próximo usuário notificado' });
+        
+        console.log('✅ Senha redefinida com sucesso');
+        
+        res.json({ message: 'Senha alterada com sucesso! Você já pode fazer login.' });
         
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('Erro ao cancelar empréstimo:', error);
+        console.error('Erro ao redefinir senha:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
 });
 
-// Gerar relatório administrativo
-app.get('/api/admin/report', isAuthenticated, isAdmin, async (req, res) => {
+// ================================
+// ROTA DE ALTERAÇÃO DE NOME
+// ================================
+
+app.put('/api/profile/name', isAuthenticated, async (req, res) => {
+    const { novoNome } = req.body;
+    const userCpf = req.session.user.cpf;
+    
+    if (!novoNome || !novoNome.trim()) {
+        return res.status(400).json({ error: 'Nome é obrigatório' });
+    }
+    
+    if (novoNome.trim().length < 3) {
+        return res.status(400).json({ error: 'Nome deve ter no mínimo 3 caracteres' });
+    }
+    
+    if (novoNome.trim().length > 255) {
+        return res.status(400).json({ error: 'Nome deve ter no máximo 255 caracteres' });
+    }
+    
     let connection;
     try {
         connection = await pool.getConnection();
         
-        // Estatísticas gerais
-        const [stats] = await connection.execute(`
-            SELECT 
-                (SELECT COUNT(*) FROM usuarios WHERE tipo = 'leitor') as total_leitores,
-                (SELECT COUNT(*) FROM livros) as total_livros,
-                (SELECT COUNT(*) FROM emprestimos WHERE status = 'ativo') as emprestimos_ativos,
-                (SELECT COUNT(*) FROM emprestimos WHERE status = 'devolvido') as emprestimos_concluidos,
-                (SELECT COUNT(*) FROM emprestimos WHERE DATEDIFF(CURDATE(), data_prevista_devolucao) > 0 AND status = 'ativo') as emprestimos_atrasados,
-                (SELECT COUNT(*) FROM reservas WHERE status = 'aguardando') as reservas_ativas,
-                (SELECT COUNT(*) FROM resenhas) as total_resenhas,
-                (SELECT AVG(rating) FROM resenhas) as media_avaliacoes
-        `);
+        const [result] = await connection.execute(
+            'UPDATE usuarios SET nome = ?, data_atualizacao = NOW() WHERE cpf = ?',
+            [novoNome.trim(), userCpf]
+        );
         
-        // Livros mais emprestados
-        const [topBooks] = await connection.execute(`
-            SELECT l.title, l.author, COUNT(e.id) as total_emprestimos
-            FROM livros l
-            JOIN emprestimos e ON l.id = e.bookId
-            GROUP BY l.id
-            ORDER BY total_emprestimos DESC
-            LIMIT 10
-        `);
-        
-        // Usuários mais ativos
-        const [topUsers] = await connection.execute(`
-            SELECT u.nome, u.livros_lidos, COUNT(e.id) as total_emprestimos
-            FROM usuarios u
-            LEFT JOIN emprestimos e ON u.cpf = e.cpf
-            WHERE u.tipo = 'leitor'
-            GROUP BY u.cpf
-            ORDER BY total_emprestimos DESC
-            LIMIT 10
-        `);
-        
-        // Empréstimos por mês (últimos 6 meses)
-        const [monthlyLoans] = await connection.execute(`
-            SELECT 
-                DATE_FORMAT(data_retirada, '%Y-%m') as mes,
-                COUNT(*) as total
-            FROM emprestimos
-            WHERE data_retirada >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-            GROUP BY DATE_FORMAT(data_retirada, '%Y-%m')
-            ORDER BY mes DESC
-        `);
-        
-        res.json({
-            stats: stats[0],
-            topBooks,
-            topUsers,
-            monthlyLoans
-        });
+        if (result.affectedRows > 0) {
+            // Atualizar sessão
+            req.session.user.nome = novoNome.trim();
+            
+            res.json({ 
+                message: 'Nome atualizado com sucesso!',
+                nome: novoNome.trim()
+            });
+        } else {
+            res.status(404).json({ error: 'Usuário não encontrado' });
+        }
         
     } catch (error) {
-        console.error('Erro ao gerar relatório:', error);
+        console.error('Erro ao atualizar nome:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
 });
-
 
 // ================================
 // TESTE DE CONEXÃO

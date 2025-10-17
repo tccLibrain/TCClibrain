@@ -492,11 +492,12 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                     </div>
                 </div>
 
-                <div id="usuarios" class="tab-content">
+               <div id="usuarios" class="tab-content">
                     <h2>Gerenciar Usuários</h2>
                     <div class="admin-form" style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
                         <input type="text" id="admin-cpf" placeholder="CPF do usuário" maxlength="14" style="padding: 8px 12px; border: 1px solid var(--cinza-escuro); border-radius: 6px; font-size: 14px;">
-                        <button id="btn-add-admin" class="btn">Promover a Admin</button>
+                        <button id="btn-add-admin" class="btn">➕ Promover a Admin</button>
+                        <button id="btn-remove-admin" class="btn btn-secondary" style="background-color: #dc3545;">➖ Remover Admin</button>
                     </div>
                     <div id="users-list">
                         <p>Carregando lista de usuários...</p>
@@ -644,11 +645,12 @@ function setupAdminEventListeners(container, allBooks) {
         }
     });
 
-    // Promover usuário a admin
+   // Promover usuário a admin
     const addAdminBtn = container.querySelector('#btn-add-admin');
+    const removeAdminBtn = container.querySelector('#btn-remove-admin');
     const cpfInput = container.querySelector('#admin-cpf');
 
-    if (addAdminBtn && cpfInput) {
+    if (cpfInput) {
         cpfInput.addEventListener('input', (e) => {
             let value = e.target.value.replace(/\D/g, '');
             value = value.replace(/(\d{3})(\d)/, '$1.$2');
@@ -656,7 +658,9 @@ function setupAdminEventListeners(container, allBooks) {
             value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
             e.target.value = value;
         });
+    }
 
+    if (addAdminBtn && cpfInput) {
         addAdminBtn.addEventListener('click', async () => {
             const cpf = cpfInput.value.trim();
             if (!cpf) {
@@ -687,6 +691,42 @@ function setupAdminEventListeners(container, allBooks) {
                 }
             } catch (error) {
                 console.error('Erro ao promover usuário:', error);
+                alert('Erro de conexão.');
+            }
+        });
+    }
+
+    if (removeAdminBtn && cpfInput) {
+        removeAdminBtn.addEventListener('click', async () => {
+            const cpf = cpfInput.value.trim();
+            if (!cpf) {
+                alert('Por favor, insira um CPF.');
+                return;
+            }
+
+            if (!confirm(`⚠️ Deseja remover privilégios de administrador do usuário com CPF ${cpf}?\n\nO usuário voltará a ser um leitor comum.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:3000/api/admin/remove-admin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ cpf })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'Privilégios de administrador removidos!');
+                    cpfInput.value = '';
+                    loadUsersList();
+                } else {
+                    const error = await response.json();
+                    alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                }
+            } catch (error) {
+                console.error('Erro ao remover admin:', error);
                 alert('Erro de conexão.');
             }
         });

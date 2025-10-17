@@ -1,5 +1,6 @@
 import { navigateTo } from '../main.js';
 import fundoTopoPerfil from '../images/fundoTopoPerfil.png';
+import { updateShellAvatar } from './MenuHeaderFooter.js'; // ✅ CORRETO
 
 export async function renderUserProfile(container) {
     container.innerHTML = ''; 
@@ -520,6 +521,12 @@ export async function renderUserProfile(container) {
                     ${bioTexto}
                 </p>
             </div>
+
+            <div class="profile-info centro" style="padding: 15px;">
+    <button id="changeNameBtn" class="btn" style="background-color: #9bb4ff;">
+        ✏️ Alterar Nome
+    </button>
+</div>
     
             <div class="separator-line"></div>
     
@@ -599,6 +606,44 @@ function setupEventListeners(user, container, conquistas) {
     const tabs = container.querySelectorAll('.achievement-tab');
     const achievementsGrid = container.querySelector('#achievements-grid');
 
+    // Botão de alterar nome
+const changeNameBtn = container.querySelector('#changeNameBtn');
+if (changeNameBtn) {
+    changeNameBtn.addEventListener('click', () => {
+        const novoNome = prompt('Digite seu novo nome:', user.nome);
+        
+        if (!novoNome || novoNome.trim() === user.nome) {
+            return;
+        }
+        
+        if (novoNome.trim().length < 3) {
+            showMessage('❌ Nome deve ter no mínimo 3 caracteres', 'error');
+            return;
+        }
+        
+        fetch('http://localhost:3000/api/profile/name', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ novoNome: novoNome.trim() })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.nome) {
+                user.nome = data.nome;
+                container.querySelector('.profile-info h2').textContent = data.nome;
+                showMessage('✅ ' + data.message, 'success');
+            } else {
+                showMessage('❌ ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            showMessage('❌ Erro de conexão', 'error');
+        });
+    });
+}
+
     if (tabs.length > 0 && achievementsGrid) {
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
@@ -620,88 +665,82 @@ function setupEventListeners(user, container, conquistas) {
             });
         });
     }
+// Upload de avatar - SEM LIMITE DE TAMANHO
+if (avatarInput && avatarImg) {
+    avatarInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
 
-    // Upload de avatar - CORRIGIDO
-    if (avatarInput && avatarImg) {
-        avatarInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+        console.log('📤 Iniciando upload de avatar');
+        console.log('Arquivo:', file.name, 'Tipo:', file.type, 'Tamanho:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-            console.log('📤 Iniciando upload de avatar');
-            console.log('Arquivo:', file.name, 'Tipo:', file.type, 'Tamanho:', (file.size / 1024).toFixed(2), 'KB');
+        // Validações - APENAS FORMATO, SEM LIMITE DE TAMANHO
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
+        
+        if (!allowedTypes.includes(file.type)) {
+            showMessage(`❌ Formato não suportado: ${file.type}. Use JPEG, PNG, GIF, WebP ou BMP.`, 'error');
+            avatarInput.value = '';
+            return;
+        }
 
-            // Validações
-            const maxSize = 5 * 1024 * 1024; // 5MB
-            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+        console.log('✅ Formato válido! Tamanho:', (file.size / 1024 / 1024).toFixed(2), 'MB - SEM LIMITE!');
+
+        // Preview temporário
+        const tempUrl = URL.createObjectURL(file);
+        const oldSrc = avatarImg.src;
+        avatarImg.src = tempUrl;
+
+        const reader = new FileReader();
+        
+        reader.onload = async function(event) {
+            const base64Image = event.target.result;
             
-            if (!allowedTypes.includes(file.type)) {
-                showMessage(`❌ Formato não suportado: ${file.type}. Use JPEG, PNG, GIF ou WebP.`, 'error');
-                avatarInput.value = '';
-                return;
-            }
+            console.log('✅ Base64 gerado:', (base64Image.length / 1024 / 1024).toFixed(2), 'MB');
 
-            if (file.size > maxSize) {
-                showMessage(`❌ Imagem muito grande (${(file.size / 1024 / 1024).toFixed(2)}MB). Máximo: 5MB.`, 'error');
-                avatarInput.value = '';
-                return;
-            }
-
-            // Preview temporário
-            const tempUrl = URL.createObjectURL(file);
-            const oldSrc = avatarImg.src;
-            avatarImg.src = tempUrl;
-
-            const reader = new FileReader();
-            
-            reader.onload = async function(event) {
-                const base64Image = event.target.result;
+            try {
+                const loadingMsg = showMessage('⏳ Enviando imagem...', 'info');
                 
-                console.log('✅ Base64 gerado:', (base64Image.length / 1024).toFixed(2), 'KB');
+                const response = await fetch('http://localhost:3000/api/profile/avatar', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ avatarUrl: base64Image })
+                });
 
-                try {
-                    const loadingMsg = showMessage('⏳ Enviando imagem...', 'info');
-                    
-                    const response = await fetch('http://localhost:3000/api/profile/avatar', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({ avatarUrl: base64Image })
-                    });
+                if (loadingMsg) loadingMsg.remove();
 
-                    if (loadingMsg) loadingMsg.remove();
-
-                    if (response.ok) {
-                        const result = await response.json();
-                        avatarImg.src = base64Image;
-                        user.avatar_url = base64Image;
-                        showMessage('✅ Avatar atualizado com sucesso!', 'success');
-                        console.log('✅ Avatar salvo no banco de dados');
-                    } else {
-                        const error = await response.json();
-                        throw new Error(error.error || 'Erro ao atualizar avatar');
-                    }
-                } catch (error) {
-                    console.error('❌ Erro no upload:', error);
-                    avatarImg.src = oldSrc;
-                    showMessage(`❌ ${error.message}`, 'error');
-                } finally {
-                    avatarInput.value = '';
-                    URL.revokeObjectURL(tempUrl);
+                if (response.ok) {
+                    const result = await response.json();
+                    avatarImg.src = base64Image;
+                    user.avatar_url = base64Image;
+                    updateShellAvatar(base64Image);
+                    showMessage('✅ Avatar atualizado com sucesso!', 'success');
+                    console.log('✅ Avatar salvo no banco de dados');
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erro ao atualizar avatar');
                 }
-            };
-
-            reader.onerror = function() {
-                console.error('❌ Erro ao ler arquivo');
+            } catch (error) {
+                console.error('❌ Erro no upload:', error);
                 avatarImg.src = oldSrc;
-                showMessage('❌ Erro ao processar a imagem. Tente outro arquivo.', 'error');
+                showMessage(`❌ ${error.message}`, 'error');
+            } finally {
                 avatarInput.value = '';
                 URL.revokeObjectURL(tempUrl);
-            };
+            }
+        };
 
-            reader.readAsDataURL(file);
-        });
-    }
+        reader.onerror = function() {
+            console.error('❌ Erro ao ler arquivo');
+            avatarImg.src = oldSrc;
+            showMessage('❌ Erro ao processar a imagem. Tente outro arquivo.', 'error');
+            avatarInput.value = '';
+            URL.revokeObjectURL(tempUrl);
+        };
 
+        reader.readAsDataURL(file);
+    });
+}
     // Edição de biografia
     if (bioText) {
         bioText.addEventListener('click', () => {
