@@ -1,15 +1,5 @@
--- ==========================================
--- BANCO DE DADOS LIBRAIN - VERSÃO LIMPA E CORRIGIDA
--- ==========================================
-
--- Criação do banco de dados
-DROP DATABASE IF EXISTS librain;
 CREATE DATABASE librain CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE librain;
-
--- ==========================================
--- TABELAS
--- ==========================================
 
 -- Tabela de usuários
 CREATE TABLE usuarios (
@@ -164,6 +154,18 @@ CREATE TABLE conquistas_disponiveis (
     condicao_valor INT NOT NULL,
     ordem_exibicao INT DEFAULT 0,
     ativa BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE password_reset_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cpf VARCHAR(11) NOT NULL,
+    token VARCHAR(64) NOT NULL UNIQUE,
+    expira_em TIMESTAMP NOT NULL,
+    usado BOOLEAN DEFAULT FALSE,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cpf) REFERENCES usuarios(cpf) ON DELETE CASCADE ON UPDATE CASCADE,
+    INDEX idx_token (token),
+    INDEX idx_cpf_usado (cpf, usado)
 );
 
 -- ==========================================
@@ -437,6 +439,7 @@ INSERT INTO livros (title, author, genre, synopsis, pages, cover, isbn, editora,
 ('O Poder do Hábito', 'Charles Duhigg', 'Autoajuda', 'Como os hábitos funcionam e como podemos mudá-los.', 408, 'https://m.media-amazon.com/images/I/71g0HPcWNGL._SL1000_.jpg', '9788539004119', 'Objetiva', 2012),
 ('It: A Coisa', 'Stephen King', 'Terror', 'Um grupo de amigos enfrenta uma entidade maligna em sua cidade natal.', 1104, 'https://m.media-amazon.com/images/I/71W0aKfJHmL._SL1500_.jpg', '9788581052380', 'Suma', 1986);
 
--- ==========================================
--- FIM DO SCRIPT
--- ==========================================
+
+
+SET GLOBAL max_allowed_packet=134217728; 
+SET GLOBAL innodb_buffer_pool_size=268435456; 
