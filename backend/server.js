@@ -55,6 +55,8 @@ async function enviarEmail(destinatario, assunto, html) {
 app.use(express.json({ limit: 'Infinity' }));
 app.use(express.urlencoded({ limit: 'Infinity', extended: true }));
 
+app.use(express.static('public'));
+
 // Configuração do CORS para permitir que o frontend envie cookies de sessão
 app.use(cors({
     origin: 'http://localhost:5173',
