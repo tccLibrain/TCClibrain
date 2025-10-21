@@ -559,7 +559,58 @@ app.post('/api/logout', (req, res) => {
 // ROTAS DE LIVROS
 // ================================
 
-
+app.get('/api/books/:id/user-status', isAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    const userCpf = req.session.user.cpf;
+    
+    console.log('🔍 Verificando status - BookId:', id, 'CPF:', userCpf);
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        // 1️⃣ Buscar empréstimo mais recente (qualquer status relevante)
+        const [emprestimo] = await connection.execute(`
+            SELECT status, data_retirada, data_prevista_devolucao,
+                   DATE_FORMAT(data_retirada, '%d/%m/%Y') as data_formatada
+            FROM emprestimos 
+            WHERE bookId = ? AND cpf = ? 
+            AND status IN ('aguardando_retirada', 'ativo', 'pendente_devolucao')
+            ORDER BY data_retirada DESC 
+            LIMIT 1
+        `, [id, userCpf]);
+        
+        console.log('📊 Empréstimo encontrado:', emprestimo[0]?.status || 'nenhum');
+        
+        // 2️⃣ Buscar reserva na fila
+        const [reserva] = await connection.execute(`
+            SELECT posicao 
+            FROM reservas 
+            WHERE bookId = ? AND cpf = ? AND status = 'aguardando'
+        `, [id, userCpf]);
+        
+        console.log('📋 Reserva encontrada:', reserva.length > 0 ? `posição ${reserva[0]?.posicao}` : 'nenhuma');
+        
+        // 3️⃣ Montar resposta detalhada
+        const response = {
+            hasLoan: emprestimo.length > 0,
+            loanStatus: emprestimo[0]?.status || null,
+            loanDate: emprestimo[0]?.data_formatada || null,
+            hasReservation: reserva.length > 0,
+            queuePosition: reserva[0]?.posicao || null
+        };
+        
+        console.log('✅ Resposta:', response);
+        
+        res.json(response);
+        
+    } catch (error) {
+        console.error('❌ Erro ao verificar status:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
 
 app.get('/api/books', async (req, res) => {
     console.log('=== DEBUG: Requisição para /api/books recebida ===');
@@ -568,11 +619,14 @@ app.get('/api/books', async (req, res) => {
     try {
         connection = await pool.getConnection();
         
+        // ✅ CORRIGIDO: 
+        // 1. Status 'aguardando_retirada' também torna o livro indisponível
+        // 2. r.id corrigido para r.bookId
         const [rows] = await connection.execute(`
             SELECT 
                 l.*,
                 CASE 
-                    WHEN e.id IS NOT NULL AND e.status = 'ativo' THEN false
+                    WHEN e.id IS NOT NULL AND e.status IN ('ativo', 'aguardando_retirada') THEN false
                     ELSE true 
                 END as available,
                 e.cpf as emprestadoPara,
@@ -580,8 +634,9 @@ app.get('/api/books', async (req, res) => {
                 COUNT(r.id) as reviewCount,
                 AVG(r.rating) as avgRating
             FROM livros l
-            LEFT JOIN emprestimos e ON l.id = e.bookId AND e.status = 'ativo'
-            LEFT JOIN resenhas r ON l.id = r.id
+            LEFT JOIN emprestimos e ON l.id = e.bookId 
+                AND e.status IN ('ativo', 'aguardando_retirada')
+            LEFT JOIN resenhas r ON l.id = r.bookId
             GROUP BY l.id, e.id, e.cpf, e.data_prevista_devolucao
             ORDER BY l.title
         `);
@@ -596,11 +651,7 @@ app.get('/api/books', async (req, res) => {
             avgRating: book.avgRating ? parseFloat(book.avgRating) : null
         }));
         
-        console.log('Primeiros 3 livros processados:', processedBooks.slice(0, 3).map(b => ({
-            id: b.id,
-            title: b.title,
-            available: b.available
-        })));
+        console.log('Livros indisponíveis:', processedBooks.filter(b => !b.available).length);
         
         res.json(processedBooks);
     } catch (error) {
@@ -618,7 +669,6 @@ app.get('/api/books', async (req, res) => {
     }
 });
 
-
 app.get('/api/books/:id', async (req, res) => {
     const { id } = req.params;
     
@@ -626,18 +676,20 @@ app.get('/api/books/:id', async (req, res) => {
     try {
         connection = await pool.getConnection();
         
-        // Buscar livro - APENAS status "ativo" torna indisponível
+        // ✅ CORRIGIDO: Inclui ambos os status que tornam o livro indisponível
         const [bookRows] = await connection.execute(`
             SELECT 
                 l.*,
                 CASE 
-                    WHEN e.id IS NOT NULL AND e.status = 'ativo' THEN false
+                    WHEN e.id IS NOT NULL AND e.status IN ('ativo', 'aguardando_retirada') THEN false
                     ELSE true 
                 END as available,
                 e.cpf as emprestadoPara,
+                e.status as emprestimoStatus,
                 DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as returnDate
             FROM livros l
-            LEFT JOIN emprestimos e ON l.id = e.bookId AND e.status = 'ativo'
+            LEFT JOIN emprestimos e ON l.id = e.bookId 
+                AND e.status IN ('ativo', 'aguardando_retirada')
             WHERE l.id = ?
         `, [id]);
         
@@ -657,6 +709,8 @@ app.get('/api/books/:id', async (req, res) => {
         
         book.queue = queueRows.map(row => row.cpf);
         
+        console.log(`📚 Livro ${id}: disponível=${book.available}, status_emprestimo=${book.emprestimoStatus || 'nenhum'}`);
+        
         res.json(book);
         
     } catch (error) {
@@ -665,8 +719,8 @@ app.get('/api/books/:id', async (req, res) => {
     } finally {
         if (connection) connection.release();
     }
-
 });
+
 
 app.get('/api/user/loan-history/:bookId', isAuthenticated, async (req, res) => {
     const { bookId } = req.params;
@@ -1519,19 +1573,26 @@ app.post('/api/user/shelves/add-book', isAuthenticated, async (req, res) => {
 app.get('/api/user/dashboard', isAuthenticated, async (req, res) => {
     const userCpf = req.session.user.cpf;
     
+    console.log('📊 Dashboard solicitado para CPF:', userCpf);
+    
     let connection;
     try {
         connection = await pool.getConnection();
         
-        // Buscar empréstimos ativos
+        // ✅ CORRIGIDO: Buscar AMBOS os status (ativo E aguardando_retirada)
         const [emprestados] = await connection.execute(`
             SELECT e.*, l.title, l.author, 
                    DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as data_devolucao_formatada
             FROM emprestimos e
             JOIN livros l ON e.bookId = l.id
-             WHERE e.cpf = ? AND e.status IN ('ativo', 'aguardando_retirada')
+            WHERE e.cpf = ? AND e.status IN ('ativo', 'aguardando_retirada')
             ORDER BY e.data_prevista_devolucao ASC
         `, [userCpf]);
+        
+        console.log(`📚 Empréstimos ativos/aguardando: ${emprestados.length}`);
+        emprestados.forEach(emp => {
+            console.log(`  - Livro ${emp.bookId} (${emp.title}): ${emp.status}`);
+        });
         
         // Buscar reservas
         const [reservas] = await connection.execute(`
@@ -1542,6 +1603,8 @@ app.get('/api/user/dashboard', isAuthenticated, async (req, res) => {
             ORDER BY r.posicao ASC
         `, [userCpf]);
         
+        console.log(`📋 Reservas ativas: ${reservas.length}`);
+        
         // Buscar devoluções pendentes
         const [devolucoesPendentes] = await connection.execute(`
             SELECT e.*, l.title, l.author
@@ -1551,6 +1614,8 @@ app.get('/api/user/dashboard', isAuthenticated, async (req, res) => {
             ORDER BY e.data_real_devolucao ASC
         `, [userCpf]);
         
+        console.log(`📖 Devoluções pendentes: ${devolucoesPendentes.length}`);
+        
         res.json({
             emprestados,
             reservas,
@@ -1558,13 +1623,12 @@ app.get('/api/user/dashboard', isAuthenticated, async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Erro ao buscar dashboard:', error);
+        console.error('❌ Erro ao buscar dashboard:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
 });
-
 
 // ================================
 // CONQUISTAS DO USUÁRIO
@@ -2511,6 +2575,26 @@ app.use((error, req, res, next) => {
 // ================================
 // INICIALIZAÇÃO DO SERVIDOR
 // ================================
+app.use((err, req, res, next) => {
+    console.error('Erro não tratado:', err);
+    
+    if (err.code === 'ECONNREFUSED') {
+        return res.status(503).json({ 
+            error: 'Banco de dados indisponível' 
+        });
+    }
+    
+    if (err.code === 'ER_ACCESS_DENIED_ERROR') {
+        return res.status(500).json({ 
+            error: 'Erro de autenticação no banco de dados' 
+        });
+    }
+    
+    res.status(500).json({ 
+        error: 'Erro interno do servidor',
+        message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+});
 
 createPool().then(() => {
     app.listen(PORT, () => {

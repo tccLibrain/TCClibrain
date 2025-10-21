@@ -90,69 +90,74 @@ export async function renderBookDetails(container, bookId) {
         const isEmprestado = !!book.emprestadoPara;
         
         console.log('=== STATUS DO LIVRO ===');
-        console.log('book.available (raw):', book.available, 'tipo:', typeof book.available);
-        console.log('bookAvailable (convertido):', bookAvailable);
+        console.log('book.available:', book.available);
+        console.log('bookAvailable:', bookAvailable);
         console.log('isEmprestado:', isEmprestado);
+        console.log('emprestimoStatus:', book.emprestimoStatus);
         
+        // ✅ VERIFICAÇÃO UNIFICADA E ROBUSTA DE STATUS
         let actionButtonHtml = '';
         if (currentUser) {
-            const isLoanedToUser = book.emprestadoPara === currentUser.cpf;
-            const isUserInQueue = book.queue && book.queue.includes(currentUser.cpf);
+            console.log('🔍 Iniciando verificação de status para usuário:', currentUser.cpf);
             
-            // Verificar status de empréstimo para este livro
-            let hasPendingRequest = false;
-            let hasPendingReturn = false;
+            // 1️⃣ DECLARAR o objeto userStatus
+            let userStatus = {
+                hasPendingRequest: false,
+                hasPendingReturn: false,
+                hasActiveLoan: false,
+                isInQueue: false,
+                queuePosition: 0
+            };
             
             try {
-                const dashboardResponse = await fetch('http://localhost:3000/api/user/dashboard', {
+                // 2️⃣ Verificar status via API
+                console.log('🔍 Chamando /api/books/' + validBookId + '/user-status');
+                const statusResponse = await fetch(`http://localhost:3000/api/books/${validBookId}/user-status`, {
                     credentials: 'include'
                 });
                 
-                if (dashboardResponse.ok) {
-                    const dashboardData = await dashboardResponse.json();
+                if (statusResponse.ok) {
+                    const statusData = await statusResponse.json();
+                    console.log('📊 Status retornado pela API:', statusData);
                     
-                    console.log('📊 DADOS DO DASHBOARD:', dashboardData);
-                    console.log('📚 Empréstimos:', dashboardData.emprestados);
-                    console.log('🔄 Devoluções pendentes:', dashboardData.devolucoesPendentes);
+                    // Atualizar userStatus baseado na resposta da API
+                    if (statusData.hasLoan) {
+                        userStatus.hasPendingRequest = statusData.loanStatus === 'aguardando_retirada';
+                        userStatus.hasPendingReturn = statusData.loanStatus === 'pendente_devolucao';
+                        userStatus.hasActiveLoan = statusData.loanStatus === 'ativo';
+                        
+                        console.log('📚 Empréstimo detectado:', statusData.loanStatus);
+                    }
                     
-                    // Verificar empréstimos aguardando retirada
-                    hasPendingRequest = dashboardData.emprestados?.some(
-                        emp => {
-                            console.log(`Verificando empréstimo: bookId=${emp.bookId}, status=${emp.status}, buscando=${parseInt(validBookId)}`);
-                            return emp.bookId === parseInt(validBookId) && emp.status === 'aguardando_retirada';
-                        }
-                    );
-                    
-                    // Verificar devoluções pendentes
-                    hasPendingReturn = dashboardData.devolucoesPendentes?.some(
-                        dev => {
-                            console.log(`Verificando devolução: bookId=${dev.bookId}, buscando=${parseInt(validBookId)}`);
-                            return dev.bookId === parseInt(validBookId);
-                        }
-                    );
-                    
-                    console.log('📋 Status do usuário para este livro:');
-                    console.log('- Aguardando retirada:', hasPendingRequest);
-                    console.log('- Aguardando devolução:', hasPendingReturn);
+                    // Verificar fila
+                    if (statusData.hasReservation) {
+                        userStatus.isInQueue = true;
+                        userStatus.queuePosition = statusData.queuePosition || 0;
+                        console.log('📋 Usuário na fila, posição:', userStatus.queuePosition);
+                    }
+                } else {
+                    console.log('⚠️ API retornou erro:', statusResponse.status);
                 }
+                
             } catch (error) {
-                console.log('Erro ao verificar status:', error);
+                console.error('❌ Erro ao verificar status via API:', error);
             }
             
-            // Montar HTML baseado no status
-            if (hasPendingRequest) {
-                actionButtonHtml = `
-                    <div class="status-aguardando">
-                        <div class="status-icon">📚</div>
-                        <div class="status-title">Empréstimo Aguardando Aprovação</div>
-                        <div class="status-message">
-                            Você solicitou o empréstimo deste livro.<br>
-                            Aguardando confirmação do bibliotecário.
-                        </div>
-                        <button id="cancelarSolicitacaoBtn" class="btn btn-secondary" style="margin-top: 15px;">Cancelar Solicitação</button>
-                    </div>
-                `;
-            } else if (hasPendingReturn) {
+            // 3️⃣ Fallback: Verificar fila via dados do livro (backup)
+            if (!userStatus.isInQueue && book.queue && Array.isArray(book.queue)) {
+                const queueIndex = book.queue.indexOf(currentUser.cpf);
+                if (queueIndex !== -1) {
+                    userStatus.isInQueue = true;
+                    userStatus.queuePosition = queueIndex + 1;
+                    console.log('📋 Fila detectada via book.queue, posição:', userStatus.queuePosition);
+                }
+            }
+            
+            console.log('✅ Status final consolidado:', userStatus);
+            
+            // 4️⃣ Montar HTML baseado no status (ORDEM IMPORTA!)
+            if (userStatus.hasPendingReturn) {
+                console.log('🟡 Exibindo: Devolução Pendente');
                 actionButtonHtml = `
                     <div class="status-aguardando">
                         <div class="status-icon">📖</div>
@@ -163,22 +168,40 @@ export async function renderBookDetails(container, bookId) {
                         </div>
                     </div>
                 `;
-            } else if (isLoanedToUser) {
+            } else if (userStatus.hasPendingRequest) {
+                console.log('🟡 Exibindo: Empréstimo Pendente');
+                actionButtonHtml = `
+                    <div class="status-aguardando">
+                        <div class="status-icon">📚</div>
+                        <div class="status-title">Empréstimo Aguardando Aprovação</div>
+                        <div class="status-message">
+                            Você solicitou o empréstimo deste livro.<br>
+                            Aguardando confirmação do bibliotecário.
+                        </div>
+                        <button id="cancelarSolicitacaoBtn" class="btn btn-secondary" style="margin-top: 15px;">
+                            Cancelar Solicitação
+                        </button>
+                    </div>
+                `;
+            } else if (userStatus.hasActiveLoan) {
+                console.log('🟢 Exibindo: Empréstimo Ativo');
                 actionButtonHtml = `
                     <div class="loan-actions">
                         <button id="devolverBtn" class="btn">Solicitar Devolução</button>
                         <button id="marcarLidoBtn" class="btn btn-success">Marcar como Lido</button>
                     </div>
                 `;
-            } else if (isUserInQueue) {
-                const position = book.queue.indexOf(currentUser.cpf) + 1;
+            } else if (userStatus.isInQueue) {
+                console.log('🟠 Exibindo: Na Fila');
                 actionButtonHtml = `
-                    <p>📋 Você está na posição <strong>${position}</strong> da fila</p>
+                    <p>📋 Você está na posição <strong>${userStatus.queuePosition}</strong> da fila</p>
                     <button id="cancelarReservaBtn" class="btn btn-secondary">Cancelar Reserva</button>
                 `;
-            } else if (isEmprestado) {
+            } else if (book.available === false || book.emprestadoPara) {
+                console.log('🔴 Exibindo: Livro Indisponível');
                 actionButtonHtml = `<button id="reservarBtn" class="btn">Entrar na Fila de Espera</button>`;
             } else {
+                console.log('🟢 Exibindo: Disponível');
                 actionButtonHtml = `<button id="solicitarBtn" class="btn">Solicitar Empréstimo</button>`;
             }
         } else {
@@ -491,14 +514,15 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 cancelarSolicitacaoBtn.textContent = 'Cancelar Solicitação';
             }
         });
-    }
-
-    // Cancelar reserva
+    }   
+    
+ // Cancelar reserva
     const cancelarReservaBtn = container.querySelector('#cancelarReservaBtn');
     if (cancelarReservaBtn) {
         cancelarReservaBtn.addEventListener('click', async () => {
             if (!confirm('Deseja cancelar esta reserva?')) return;
             cancelarReservaBtn.disabled = true;
+            cancelarReservaBtn.textContent = 'Cancelando...';
             try {
                 const res = await fetch('http://localhost:3000/api/loan/cancel-reserve', {
                     method: 'POST',
@@ -513,6 +537,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 alert('Erro de conexão.');
             } finally {
                 cancelarReservaBtn.disabled = false;
+                cancelarReservaBtn.textContent = 'Cancelar Reserva';
             }
         });
     }
@@ -527,6 +552,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 return;
             }
             saveBtn.disabled = true;
+            saveBtn.textContent = 'Salvando...';
             try {
                 const res = await fetch('http://localhost:3000/api/reviews', {
                     method: 'POST',
@@ -541,6 +567,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 alert('Erro de conexão.');
             } finally {
                 saveBtn.disabled = false;
+                saveBtn.textContent = 'Adicionar Resenha';
             }
         });
     }
@@ -551,6 +578,8 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         favoriteBtn.addEventListener('click', async () => {
             const isFavorited = favoriteBtn.classList.contains('favorited');
             favoriteBtn.disabled = true;
+            const originalText = favoriteBtn.textContent;
+            favoriteBtn.textContent = isFavorited ? 'Removendo...' : 'Favoritando...';
             try {
                 const res = await fetch(
                     isFavorited ? `http://localhost:3000/api/favorites/${bookId}` : 'http://localhost:3000/api/favorites',
@@ -568,6 +597,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 alert('Erro ao favoritar.');
             } finally {
                 favoriteBtn.disabled = false;
+                favoriteBtn.textContent = originalText;
             }
         });
     }
@@ -580,6 +610,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
             if (!reviewId || !confirm('Deseja excluir esta resenha?')) return;
             
             e.target.disabled = true;
+            e.target.textContent = 'Excluindo...';
             try {
                 const res = await fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
                     method: 'DELETE',
@@ -595,6 +626,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 alert('Erro de conexão');
             } finally {
                 e.target.disabled = false;
+                e.target.textContent = 'Excluir';
             }
         }
         
@@ -606,10 +638,10 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
             const currentText = reviewCard.querySelector('p').textContent.trim();
             const currentRating = reviewCard.querySelectorAll('.stars-display .star.filled').length;
             
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.style.display = 'block';
-            modal.innerHTML = `
+            const editModal = document.createElement('div');
+            editModal.className = 'modal';
+            editModal.style.display = 'block';
+            editModal.innerHTML = `
                 <div class="modal-content" style="max-width: 500px;">
                     <span class="close-btn">&times;</span>
                     <h3>Editar Resenha</h3>
@@ -626,10 +658,10 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 </div>
             `;
             
-            document.body.appendChild(modal);
+            document.body.appendChild(editModal);
             
             let editRating = currentRating;
-            const editStars = modal.querySelectorAll('#editRatingInput .star');
+            const editStars = editModal.querySelectorAll('#editRatingInput .star');
             const updateEditStars = (rating) => editStars.forEach((s, i) => s.classList.toggle('filled', i < rating));
             
             editStars.forEach(star => {
@@ -640,14 +672,17 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                 star.addEventListener('mouseenter', () => updateEditStars(parseInt(star.dataset.value)));
             });
             
-            modal.querySelector('#editRatingInput').addEventListener('mouseleave', () => updateEditStars(editRating));
+            editModal.querySelector('#editRatingInput').addEventListener('mouseleave', () => updateEditStars(editRating));
             
-            modal.querySelector('#saveEditBtn').addEventListener('click', async () => {
-                const newText = modal.querySelector('#editReviewText').value.trim();
+            const saveEditBtn = editModal.querySelector('#saveEditBtn');
+            saveEditBtn.addEventListener('click', async () => {
+                const newText = editModal.querySelector('#editReviewText').value.trim();
                 if (editRating === 0) {
                     alert('Selecione uma classificação');
                     return;
                 }
+                saveEditBtn.disabled = true;
+                saveEditBtn.textContent = 'Salvando...';
                 try {
                     const res = await fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
                         method: 'PUT',
@@ -657,31 +692,34 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                     });
                     if (res.ok) {
                         alert('Resenha atualizada!');
-                        modal.remove();
+                        editModal.remove();
                         renderBookDetails(container, bookId);
                     } else {
                         alert('Erro ao atualizar resenha');
                     }
                 } catch (error) {
                     alert('Erro de conexão');
+                } finally {
+                    saveEditBtn.disabled = false;
+                    saveEditBtn.textContent = 'Salvar';
                 }
             });
             
-            modal.querySelector('.close-btn').addEventListener('click', () => modal.remove());
-            modal.querySelector('#cancelEditBtn').addEventListener('click', () => modal.remove());
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) modal.remove();
+            editModal.querySelector('.close-btn').addEventListener('click', () => editModal.remove());
+            editModal.querySelector('#cancelEditBtn').addEventListener('click', () => editModal.remove());
+            editModal.addEventListener('click', (e) => {
+                if (e.target === editModal) editModal.remove();
             });
         }
     });
 
     // Modal de prateleiras
-    const modal = container.querySelector('#shelfModal');
+    const shelfModal = container.querySelector('#shelfModal');
     const addShelfBtn = container.querySelector('#addShelfBtn');
-    const closeBtn = container.querySelector('.close-btn');
+    const closeShelfBtn = container.querySelector('.close-btn');
     const shelfList = container.querySelector('#shelfList');
 
-    if (addShelfBtn && modal && shelfList) {
+    if (addShelfBtn && shelfModal && shelfList) {
         addShelfBtn.addEventListener('click', () => {
             if (userShelves && userShelves.length > 0) {
                 shelfList.innerHTML = userShelves.map(shelf => `
@@ -709,7 +747,7 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
                             });
                             const result = await res.json();
                             alert(result.message || result.error);
-                            if (res.ok) modal.style.display = 'none';
+                            if (res.ok) shelfModal.style.display = 'none';
                         } catch (error) {
                             alert('Erro ao adicionar livro.');
                         } finally {
@@ -721,18 +759,18 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
             } else {
                 shelfList.innerHTML = '<p>Você não tem prateleiras. Crie uma na seção "Minhas Prateleiras"!</p>';
             }
-            modal.style.display = 'block';
+            shelfModal.style.display = 'block';
         });
     }
 
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => { 
-            if (modal) modal.style.display = 'none'; 
+    if (closeShelfBtn && shelfModal) {
+        closeShelfBtn.addEventListener('click', () => { 
+            shelfModal.style.display = 'none'; 
         });
     }
     
     window.addEventListener('click', (e) => { 
-        if (e.target === modal) modal.style.display = 'none'; 
+        if (e.target === shelfModal) shelfModal.style.display = 'none'; 
     });
     
     const createShelfModalBtn = container.querySelector('#createShelfModalBtn');
