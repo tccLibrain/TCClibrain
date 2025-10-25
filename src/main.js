@@ -63,10 +63,10 @@ export async function initApp() {
     }
     
     // Navegar para a rota apropriada
-    if (route === 'details' && params[0]) {
+    if (route === 'book-details' && params[0]) {
         const bookId = parseInt(params[0]);
         if (!isNaN(bookId)) {
-            navigateTo('details', { bookId, user });
+            navigateTo('book-details', { bookId, user });
             return;
         }
     }
@@ -117,8 +117,8 @@ export async function navigateTo(screen, params = {}) {
 
 function updateBrowserURL(screen, params) {
     let url = '#';
-    if (screen === 'details' && params.bookId) {
-        url = `#details/${params.bookId}`;
+    if (screen === 'book-details' && params.bookId) {
+        url = `#book-details/${params.bookId}`;
     } else if (screen !== 'login' && screen !== 'register' && screen !== 'forgot-password' && screen !== 'reset-password') {
         url = `#${screen}`;
     } else {
@@ -170,7 +170,7 @@ async function renderScreen(screen, container, params) {
             updateActiveFooterButton('books');
             break;
             
-        case 'details':
+        case 'book-details':
             if (params.bookId) {
                 console.log('Renderizando detalhes do livro:', params.bookId);
                 await renderBookDetails(container, params.bookId);
@@ -243,10 +243,10 @@ window.addEventListener('popstate', () => {
     const hash = window.location.hash || '#books';
     const [route, ...params] = hash.substring(1).split('/');
     
-    if (route === 'details' && params[0]) {
+    if (route === 'book-details' && params[0]) {
         const bookId = parseInt(params[0]);
         if (!isNaN(bookId)) {
-            navigateTo('details', { bookId });
+            navigateTo('book-details', { bookId });
             return;
         }
     }
@@ -266,10 +266,10 @@ document.addEventListener('click', (e) => {
         const href = link.getAttribute('href').substring(1);
         if (href) {
             const [route, ...params] = href.split('/');
-            if (route === 'details' && params[0]) {
+            if (route === 'book-details' && params[0]) {
                 const bookId = parseInt(params[0]);
                 if (!isNaN(bookId)) {
-                    navigateTo('details', { bookId });
+                    navigateTo('book-details', { bookId });
                     return;
                 }
             }

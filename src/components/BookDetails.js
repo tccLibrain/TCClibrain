@@ -1,15 +1,5 @@
 import { navigateTo } from '../main.js';
 
-function createPlaceholderImage(title, width = 150, height = 210) {
-    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-        <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-            <rect width="100%" height="100%" fill="#9dadb7"/>
-            <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#ffffff" 
-                  text-anchor="middle" dominant-baseline="middle">${title?.substring(0, 8) || 'Livro'}</text>
-        </svg>
-    `)}`;
-}
-
 export async function renderBookDetails(container, bookId) {
     console.log('=== INICIANDO RENDERIZAÇÃO DE DETALHES ===');
     console.log('BookId recebido:', bookId, 'Tipo:', typeof bookId);
@@ -95,12 +85,10 @@ export async function renderBookDetails(container, bookId) {
         console.log('isEmprestado:', isEmprestado);
         console.log('emprestimoStatus:', book.emprestimoStatus);
         
-        // ✅ VERIFICAÇÃO UNIFICADA E ROBUSTA DE STATUS
         let actionButtonHtml = '';
         if (currentUser) {
             console.log('🔍 Iniciando verificação de status para usuário:', currentUser.cpf);
             
-            // 1️⃣ DECLARAR o objeto userStatus
             let userStatus = {
                 hasPendingRequest: false,
                 hasPendingReturn: false,
@@ -110,7 +98,6 @@ export async function renderBookDetails(container, bookId) {
             };
             
             try {
-                // 2️⃣ Verificar status via API
                 console.log('🔍 Chamando /api/books/' + validBookId + '/user-status');
                 const statusResponse = await fetch(`http://localhost:3000/api/books/${validBookId}/user-status`, {
                     credentials: 'include'
@@ -120,7 +107,6 @@ export async function renderBookDetails(container, bookId) {
                     const statusData = await statusResponse.json();
                     console.log('📊 Status retornado pela API:', statusData);
                     
-                    // Atualizar userStatus baseado na resposta da API
                     if (statusData.hasLoan) {
                         userStatus.hasPendingRequest = statusData.loanStatus === 'aguardando_retirada';
                         userStatus.hasPendingReturn = statusData.loanStatus === 'pendente_devolucao';
@@ -129,7 +115,6 @@ export async function renderBookDetails(container, bookId) {
                         console.log('📚 Empréstimo detectado:', statusData.loanStatus);
                     }
                     
-                    // Verificar fila
                     if (statusData.hasReservation) {
                         userStatus.isInQueue = true;
                         userStatus.queuePosition = statusData.queuePosition || 0;
@@ -143,7 +128,6 @@ export async function renderBookDetails(container, bookId) {
                 console.error('❌ Erro ao verificar status via API:', error);
             }
             
-            // 3️⃣ Fallback: Verificar fila via dados do livro (backup)
             if (!userStatus.isInQueue && book.queue && Array.isArray(book.queue)) {
                 const queueIndex = book.queue.indexOf(currentUser.cpf);
                 if (queueIndex !== -1) {
@@ -155,7 +139,6 @@ export async function renderBookDetails(container, bookId) {
             
             console.log('✅ Status final consolidado:', userStatus);
             
-            // 4️⃣ Montar HTML baseado no status (ORDEM IMPORTA!)
             if (userStatus.hasPendingReturn) {
                 console.log('🟡 Exibindo: Devolução Pendente');
                 actionButtonHtml = `
@@ -208,15 +191,13 @@ export async function renderBookDetails(container, bookId) {
             actionButtonHtml = '<p style="color: var(--azul-claro);">Faça login para solicitar empréstimos</p>';
         }
 
-        const imageUrl = book.cover && book.cover.startsWith('http') 
-            ? book.cover 
-            : createPlaceholderImage(book.title || 'Livro');
+        const imageUrl = book.cover || '';
 
         container.innerHTML = `
             <style>
                 .book-details { max-width: 800px; margin: 0 auto; padding: 20px; }
                 .book-header { display: flex; gap: 20px; margin-bottom: 20px; background: var(--branco); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-                .book-cover-large { width: 200px; height: 280px; object-fit: cover; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); flex-shrink: 0; }
+                .book-cover-large { width: 200px; height: 280px; object-fit: cover; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); flex-shrink: 0; background: #f0f0f0; }
                 .book-info { flex: 1; min-width: 0; }
                 .book-info h2 { color: var(--azul-escuro); margin: 0 0 15px 0; font-size: 24px; word-wrap: break-word; }
                 .book-info p { color: var(--azul-claro); margin: 8px 0; font-size: 16px; }
@@ -261,7 +242,7 @@ export async function renderBookDetails(container, bookId) {
             
             <div class="book-details">
                 <div class="book-header">
-                    <img src="${imageUrl}" class="book-cover-large" alt="${book.title}" onerror="this.src='${createPlaceholderImage('Erro')}'; this.onerror=null;"/>
+                    <img src="${imageUrl}" class="book-cover-large" alt="${book.title}" style="display: ${imageUrl ? 'block' : 'none'};" />
                     <div class="book-info">
                         <h2>${book.title || 'Título não disponível'}</h2>
                         <p><strong>Autor:</strong> ${book.author || 'Autor desconhecido'}</p>
@@ -366,7 +347,6 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
 
     if (!currentUser) return;
 
-    // Sistema de rating
     let selectedRating = 0;
     const ratingStars = container.querySelectorAll('#ratingInput .star');
     
@@ -384,7 +364,6 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
 
     container.querySelector('#ratingInput')?.addEventListener('mouseleave', () => updateStars(selectedRating));
 
-    // Solicitar empréstimo
     const solicitarBtn = container.querySelector('#solicitarBtn');
     if (solicitarBtn) {
         solicitarBtn.addEventListener('click', async () => {
@@ -410,7 +389,6 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         });
     }
 
-    // Entrar na fila
     const reservarBtn = container.querySelector('#reservarBtn');
     if (reservarBtn) {
         reservarBtn.addEventListener('click', async () => {
@@ -434,7 +412,6 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         });
     }
 
-    // Solicitar devolução
     const devolverBtn = container.querySelector('#devolverBtn');
     if (devolverBtn) {
         devolverBtn.addEventListener('click', async () => {
@@ -460,7 +437,6 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         });
     }
     
-    // Marcar como lido
     const marcarLidoBtn = container.querySelector('#marcarLidoBtn');
     if (marcarLidoBtn) {
         marcarLidoBtn.addEventListener('click', async () => {
@@ -484,7 +460,6 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         });
     }
 
-    // Cancelar solicitação de empréstimo
     const cancelarSolicitacaoBtn = container.querySelector('#cancelarSolicitacaoBtn');
     if (cancelarSolicitacaoBtn) {
         cancelarSolicitacaoBtn.addEventListener('click', async () => {
@@ -516,7 +491,6 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         });
     }   
     
- // Cancelar reserva
     const cancelarReservaBtn = container.querySelector('#cancelarReservaBtn');
     if (cancelarReservaBtn) {
         cancelarReservaBtn.addEventListener('click', async () => {
@@ -542,7 +516,6 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         });
     }
 
-    // Salvar resenha
     const saveBtn = container.querySelector('#saveReviewBtn');
     if (saveBtn) {
         saveBtn.addEventListener('click', async () => {
@@ -572,7 +545,6 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         });
     }
 
-    // Favoritar
     const favoriteBtn = container.querySelector('#favoriteBtn');
     if (favoriteBtn) {
         favoriteBtn.addEventListener('click', async () => {
@@ -602,118 +574,183 @@ function setupBookDetailsEventListeners(container, bookId, currentUser, userShel
         });
     }
 
-    // Editar/Excluir resenha
-    container.addEventListener('click', async (e) => {
-        if (e.target.classList.contains('deleteReviewBtn')) {
-            const reviewCard = e.target.closest('.review-card');
-            const reviewId = reviewCard.dataset.reviewid;
-            if (!reviewId || !confirm('Deseja excluir esta resenha?')) return;
+container.addEventListener('click', async (e) => {
+    // ========================================
+    // DELETAR RESENHA
+    // ========================================
+    if (e.target.classList.contains('deleteReviewBtn')) {
+        // 🛡️ Proteção: Evitar múltiplos cliques
+        if (e.target.disabled) {
+            console.log('⚠️ Botão deletar já está processando');
+            return;
+        }
+        
+        const reviewCard = e.target.closest('.review-card');
+        const reviewId = reviewCard.dataset.reviewid;
+        
+        if (!reviewId || !confirm('Deseja excluir esta resenha?')) return;
+        
+        // 🔒 Bloquear IMEDIATAMENTE
+        e.target.disabled = true;
+        e.target.textContent = 'Excluindo...';
+        
+        try {
+            const res = await fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
             
-            e.target.disabled = true;
-            e.target.textContent = 'Excluindo...';
-            try {
-                const res = await fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
-                    method: 'DELETE',
-                    credentials: 'include'
-                });
-                if (res.ok) {
-                    alert('Resenha excluída!');
-                    renderBookDetails(container, bookId);
-                } else {
-                    alert('Erro ao excluir resenha');
-                }
-            } catch (error) {
-                alert('Erro de conexão');
-            } finally {
+            if (res.ok) {
+                alert('Resenha excluída com sucesso!');
+                await renderBookDetails(container, bookId);
+            } else {
+                const errorData = await res.json().catch(() => ({ error: 'Erro' }));
+                alert(errorData.error || 'Erro ao excluir');
                 e.target.disabled = false;
                 e.target.textContent = 'Excluir';
             }
+        } catch (error) {
+            console.error('Erro:', error);
+            alert('Erro de conexão');
+            e.target.disabled = false;
+            e.target.textContent = 'Excluir';
+        }
+    }
+    
+    // ========================================
+    // EDITAR RESENHA
+    // ========================================
+    if (e.target.classList.contains('editReviewBtn')) {
+        // 🛡️ Proteção: Evitar múltiplos cliques
+        if (e.target.disabled) {
+            console.log('⚠️ Botão editar já está processando');
+            return;
         }
         
-        if (e.target.classList.contains('editReviewBtn')) {
-            const reviewCard = e.target.closest('.review-card');
-            const reviewId = reviewCard.dataset.reviewid;
-            if (!reviewId) return;
-            
-            const currentText = reviewCard.querySelector('p').textContent.trim();
-            const currentRating = reviewCard.querySelectorAll('.stars-display .star.filled').length;
-            
-            const editModal = document.createElement('div');
-            editModal.className = 'modal';
-            editModal.style.display = 'block';
-            editModal.innerHTML = `
-                <div class="modal-content" style="max-width: 500px;">
-                    <span class="close-btn">&times;</span>
-                    <h3>Editar Resenha</h3>
-                    <div class="rating-input" id="editRatingInput">
-                        ${[1, 2, 3, 4, 5].map(i => `<span class="star ${i <= currentRating ? 'filled' : ''}" data-value="${i}">★</span>`).join('')}
-                    </div>
-                    <textarea id="editReviewText" rows="4" maxlength="500" 
-                              style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; 
-                              resize: vertical; box-sizing: border-box; margin: 10px 0;">${currentText}</textarea>
-                    <div style="text-align: center;">
-                        <button id="saveEditBtn" class="btn">Salvar</button>
-                        <button id="cancelEditBtn" class="btn-secondary">Cancelar</button>
-                    </div>
+        // 🔒 Bloquear IMEDIATAMENTE
+        e.target.disabled = true;
+        const originalText = e.target.textContent;
+        e.target.textContent = 'Abrindo...';
+        
+        const reviewCard = e.target.closest('.review-card');
+        const reviewId = reviewCard.dataset.reviewid;
+        
+        if (!reviewId) {
+            console.error('ReviewId não encontrado');
+            e.target.disabled = false;
+            e.target.textContent = originalText;
+            return;
+        }
+        
+        const currentText = reviewCard.querySelector('p').textContent.trim();
+        const currentRating = reviewCard.querySelectorAll('.stars-display .star.filled').length;
+        
+        // Criar modal de edição
+        const editModal = document.createElement('div');
+        editModal.className = 'modal';
+        editModal.style.display = 'block';
+        editModal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <span class="close-btn">&times;</span>
+                <h3>Editar Resenha</h3>
+                <div class="rating-input" id="editRatingInput">
+                    ${[1, 2, 3, 4, 5].map(i => 
+                        `<span class="star ${i <= currentRating ? 'filled' : ''}" data-value="${i}">★</span>`
+                    ).join('')}
                 </div>
-            `;
-            
-            document.body.appendChild(editModal);
-            
-            let editRating = currentRating;
-            const editStars = editModal.querySelectorAll('#editRatingInput .star');
-            const updateEditStars = (rating) => editStars.forEach((s, i) => s.classList.toggle('filled', i < rating));
-            
-            editStars.forEach(star => {
-                star.addEventListener('click', () => {
-                    editRating = parseInt(star.dataset.value);
-                    updateEditStars(editRating);
-                });
-                star.addEventListener('mouseenter', () => updateEditStars(parseInt(star.dataset.value)));
+                <textarea id="editReviewText" rows="4" maxlength="500" 
+                          style="width: 100%; padding: 10px; border: 1px solid #ccc; 
+                          border-radius: 6px; resize: vertical; box-sizing: border-box; 
+                          margin: 10px 0;">${currentText}</textarea>
+                <div style="text-align: center;">
+                    <button id="saveEditBtn" class="btn">Salvar</button>
+                    <button id="cancelEditBtn" class="btn-secondary">Cancelar</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(editModal);
+        
+        // Reabilitar botão original após modal abrir
+        e.target.disabled = false;
+        e.target.textContent = originalText;
+        
+        // Sistema de estrelas no modal
+        let editRating = currentRating;
+        const editStars = editModal.querySelectorAll('#editRatingInput .star');
+        const updateEditStars = (rating) => editStars.forEach((s, i) => 
+            s.classList.toggle('filled', i < rating)
+        );
+        
+        editStars.forEach(star => {
+            star.addEventListener('click', () => {
+                editRating = parseInt(star.dataset.value);
+                updateEditStars(editRating);
             });
+            star.addEventListener('mouseenter', () => 
+                updateEditStars(parseInt(star.dataset.value))
+            );
+        });
+        
+        editModal.querySelector('#editRatingInput').addEventListener('mouseleave', () => 
+            updateEditStars(editRating)
+        );
+        
+        // Botão SALVAR
+        const saveEditBtn = editModal.querySelector('#saveEditBtn');
+        saveEditBtn.addEventListener('click', async () => {
+            // 🛡️ Proteção no botão salvar
+            if (saveEditBtn.disabled) {
+                console.log('⚠️ Salvamento já em andamento');
+                return;
+            }
             
-            editModal.querySelector('#editRatingInput').addEventListener('mouseleave', () => updateEditStars(editRating));
+            const newText = editModal.querySelector('#editReviewText').value.trim();
             
-            const saveEditBtn = editModal.querySelector('#saveEditBtn');
-            saveEditBtn.addEventListener('click', async () => {
-                const newText = editModal.querySelector('#editReviewText').value.trim();
-                if (editRating === 0) {
-                    alert('Selecione uma classificação');
-                    return;
-                }
-                saveEditBtn.disabled = true;
-                saveEditBtn.textContent = 'Salvando...';
-                try {
-                    const res = await fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({ text: newText, rating: editRating })
-                    });
-                    if (res.ok) {
-                        alert('Resenha atualizada!');
-                        editModal.remove();
-                        renderBookDetails(container, bookId);
-                    } else {
-                        alert('Erro ao atualizar resenha');
-                    }
-                } catch (error) {
-                    alert('Erro de conexão');
-                } finally {
+            if (editRating === 0) {
+                alert('Selecione uma classificação');
+                return;
+            }
+            
+            // 🔒 Bloquear botão salvar
+            saveEditBtn.disabled = true;
+            saveEditBtn.textContent = 'Salvando...';
+            
+            try {
+                const res = await fetch(`http://localhost:3000/api/reviews/${reviewId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ text: newText, rating: editRating })
+                });
+                
+                if (res.ok) {
+                    alert('Resenha atualizada com sucesso!');
+                    editModal.remove();
+                    await renderBookDetails(container, bookId);
+                } else {
+                    const errorData = await res.json().catch(() => ({ error: 'Erro' }));
+                    alert(errorData.error || 'Erro ao atualizar');
                     saveEditBtn.disabled = false;
                     saveEditBtn.textContent = 'Salvar';
                 }
-            });
-            
-            editModal.querySelector('.close-btn').addEventListener('click', () => editModal.remove());
-            editModal.querySelector('#cancelEditBtn').addEventListener('click', () => editModal.remove());
-            editModal.addEventListener('click', (e) => {
-                if (e.target === editModal) editModal.remove();
-            });
-        }
-    });
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro de conexão');
+                saveEditBtn.disabled = false;
+                saveEditBtn.textContent = 'Salvar';
+            }
+        });
+        
+        // Botões de fechar
+        editModal.querySelector('.close-btn').addEventListener('click', () => editModal.remove());
+        editModal.querySelector('#cancelEditBtn').addEventListener('click', () => editModal.remove());
+        editModal.addEventListener('click', (e) => {
+            if (e.target === editModal) editModal.remove();
+        });
+    }
+});
 
-    // Modal de prateleiras
     const shelfModal = container.querySelector('#shelfModal');
     const addShelfBtn = container.querySelector('#addShelfBtn');
     const closeShelfBtn = container.querySelector('.close-btn');

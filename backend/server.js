@@ -3,13 +3,42 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const cors = require('cors');
+const path = require('path');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ================================
+// TESTE CRÍTICO DE ROTAS
+// ================================
+console.log('🔍 Registrando rota de teste...');
 
-const nodemailer = require('nodemailer');
+app.get('/api/test-simple', (req, res) => {
+    console.log('✅ Rota de teste chamada!');
+    res.json({ 
+        status: 'OK', 
+        message: 'Servidor funcionando!',
+        timestamp: new Date().toISOString()
+    });
+});
+
+console.log('✅ Rota de teste registrada');
+
+// ✅ CONFIGURAR IMAGENS - APENAS UMA VEZ
+app.use('/book-covers', express.static(path.join(__dirname, '../public/book-covers')));
+console.log('📂 Servindo imagens de:', path.join(__dirname, '../public/book-covers'));
+
+// DEPOIS vêm as outras configurações
+app.use(express.json({ limit: 'Infinity' }));
+app.use(express.urlencoded({ limit: 'Infinity', extended: true }));
+app.use(express.static('public'));
+
+app.use(cors({
+    origin: 'http://localhost:5173',
+    credentials: true
+}));
 
 // Configurar transportador de email
 const transporter = nodemailer.createTransport({
@@ -1192,6 +1221,7 @@ app.post('/api/user/notifications/mark-read', isAuthenticated, async (req, res) 
 // ROTAS DE RESENHAS
 // ================================
 
+// POST - Criar resenha
 app.post('/api/reviews', isAuthenticated, async (req, res) => {
     const { bookId, text, rating } = req.body;
     const userCpf = req.session.user.cpf;
@@ -1204,7 +1234,6 @@ app.post('/api/reviews', isAuthenticated, async (req, res) => {
         return res.status(400).json({ error: 'BookId e rating são obrigatórios' });
     }
     
-    // Validar rating
     const ratingNum = parseInt(rating);
     if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
         return res.status(400).json({ error: 'Rating deve ser um número entre 1 e 5' });
@@ -1214,7 +1243,6 @@ app.post('/api/reviews', isAuthenticated, async (req, res) => {
     try {
         connection = await pool.getConnection();
         
-        // Verificar se usuário já tem resenha para este livro
         const [existingReview] = await connection.execute(
             'SELECT id FROM resenhas WHERE bookId = ? AND cpf = ?', 
             [bookId, userCpf]
@@ -1229,19 +1257,22 @@ app.post('/api/reviews', isAuthenticated, async (req, res) => {
             VALUES (?, ?, ?, ?, NOW())
         `, [bookId, userCpf, ratingNum, text || '']);
         
-        console.log('Resenha salva com sucesso');
+        console.log('✅ Resenha salva com sucesso');
         res.status(200).json({ message: 'Resenha adicionada com sucesso!' });
         
     } catch (error) {
-        console.error('Erro ao adicionar resenha:', error);
+        console.error('❌ Erro ao adicionar resenha:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
 });
 
+// GET - Buscar resenhas de um livro
 app.get('/api/reviews/:bookId', async (req, res) => {
     const { bookId } = req.params;
+    
+    console.log('📚 Buscando resenhas do livro:', bookId);
     
     let connection;
     try {
@@ -1256,7 +1287,6 @@ app.get('/api/reviews/:bookId', async (req, res) => {
             ORDER BY r.date DESC
         `, [bookId]);
         
-        // Formatar dados para o frontend
         const formattedReviews = reviews.map(review => ({
             id: review.id,
             bookId: review.bookId,
@@ -1267,24 +1297,24 @@ app.get('/api/reviews/:bookId', async (req, res) => {
             user: review.user_name
         }));
         
+        console.log(`✅ Encontradas ${formattedReviews.length} resenhas`);
         res.json(formattedReviews);
         
     } catch (error) {
-        console.error('Erro ao buscar resenhas:', error);
+        console.error('❌ Erro ao buscar resenhas:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
 });
 
-// Atualizar resenha
-
+// PUT - Atualizar resenha
 app.put('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
     const { reviewId } = req.params;
     const { text, rating } = req.body;
     const userCpf = req.session.user.cpf;
     
-    console.log('=== EDITAR RESENHA ===');
+    console.log('📝 === EDITAR RESENHA ===');
     console.log('ReviewId:', reviewId, 'Rating:', rating);
     
     if (!rating || rating < 1 || rating > 5) {
@@ -1295,14 +1325,17 @@ app.put('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
     try {
         connection = await pool.getConnection();
         
-        // Verificar se a resenha pertence ao usuário
         const [review] = await connection.execute(
-            'SELECT * FROM resenhas WHERE id = ? AND cpf = ?',
-            [reviewId, userCpf]
+            'SELECT cpf FROM resenhas WHERE id = ?',
+            [reviewId]
         );
         
         if (review.length === 0) {
-            return res.status(403).json({ error: 'Você não tem permissão para editar esta resenha' });
+            return res.status(404).json({ error: 'Resenha não encontrada' });
+        }
+        
+        if (cleanCPF(review[0].cpf) !== cleanCPF(userCpf)) {
+            return res.status(403).json({ error: 'Sem permissão para editar' });
         }
         
         await connection.execute(
@@ -1310,66 +1343,109 @@ app.put('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
             [text || '', rating, reviewId]
         );
         
+        console.log('✅ Resenha atualizada');
         res.json({ message: 'Resenha atualizada com sucesso!' });
         
     } catch (error) {
-        console.error('Erro ao atualizar resenha:', error);
+        console.error('❌ Erro ao atualizar resenha:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
 });
 
-
-// Deletar resenha
+// DELETE - Deletar resenha (DEVE VIR POR ÚLTIMO)
 app.delete('/api/reviews/:reviewId', isAuthenticated, async (req, res) => {
     const { reviewId } = req.params;
     const userCpf = req.session.user.cpf;
     
-    console.log('🗑️ DELETAR RESENHA:', reviewId, 'User CPF:', userCpf);
+    console.log('🗑️ === DELETAR RESENHA ===');
+    console.log('ReviewId:', reviewId);
+    console.log('User CPF:', userCpf);
+    
+    if (!reviewId || isNaN(reviewId)) {
+        console.log('❌ ReviewId inválido');
+        return res.status(400).json({ error: 'ID da resenha inválido' });
+    }
     
     let connection;
     try {
         connection = await pool.getConnection();
         
-        // Verificar se a resenha existe e pertence ao usuário
+        // Buscar resenha
         const [review] = await connection.execute(
-            'SELECT cpf FROM resenhas WHERE id = ?',
+            'SELECT id, cpf, bookId FROM resenhas WHERE id = ?',
             [reviewId]
         );
         
-        console.log('Review encontrada:', review);
+        console.log('📊 Resenha encontrada?', review.length > 0);
         
         if (review.length === 0) {
+            console.log('❌ Resenha não existe');
             return res.status(404).json({ error: 'Resenha não encontrada' });
         }
         
-        // Comparar CPFs (convertendo ambos para string limpa)
+        // Comparar CPFs
         const reviewCpf = cleanCPF(review[0].cpf);
         const sessionCpf = cleanCPF(userCpf);
         
-        console.log('Comparando CPFs - Review:', reviewCpf, 'Sessão:', sessionCpf);
+        console.log('🔍 Review CPF:', reviewCpf);
+        console.log('🔍 Session CPF:', sessionCpf);
+        console.log('🔍 Match?', reviewCpf === sessionCpf);
         
         if (reviewCpf !== sessionCpf) {
-            return res.status(403).json({ error: 'Você não tem permissão para excluir esta resenha' });
+            console.log('❌ Sem permissão');
+            return res.status(403).json({ 
+                error: 'Você não tem permissão para excluir esta resenha' 
+            });
         }
         
-        // Deletar resenha
-        await connection.execute('DELETE FROM resenhas WHERE id = ?', [reviewId]);
+        // Deletar
+        const [deleteResult] = await connection.execute(
+            'DELETE FROM resenhas WHERE id = ?',
+            [reviewId]
+        );
         
-        console.log('✅ Resenha deletada com sucesso');
-        res.json({ message: 'Resenha excluída com sucesso!' });
+        console.log('🗑️ Linhas deletadas:', deleteResult.affectedRows);
+        
+        if (deleteResult.affectedRows === 0) {
+            return res.status(500).json({ error: 'Erro ao excluir' });
+        }
+        
+        console.log('✅ Resenha deletada com sucesso!');
+        res.status(200).json({ 
+            message: 'Resenha excluída com sucesso!',
+            deletedId: reviewId 
+        });
         
     } catch (error) {
-        console.error('Erro ao excluir resenha:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.error('❌ ERRO AO EXCLUIR:', error.message);
+        res.status(500).json({ 
+            error: 'Erro interno do servidor'
+        });
     } finally {
         if (connection) connection.release();
     }
 });
 
+console.log('✅ Rotas de resenhas registradas (POST, GET, PUT, DELETE)');
 
+// ================================
+// TESTE DE ROTAS - TEMPORÁRIO
+// ================================
 
+app.get('/api/test-routes', (req, res) => {
+    const routes = [];
+    app._router.stack.forEach(middleware => {
+        if (middleware.route) {
+            routes.push({
+                path: middleware.route.path,
+                methods: Object.keys(middleware.route.methods)
+            });
+        }
+    });
+    res.json(routes.filter(r => r.path && r.path.includes('/api/reviews')));
+});
 // ================================
 // ROTAS DE FAVORITOS
 // ================================

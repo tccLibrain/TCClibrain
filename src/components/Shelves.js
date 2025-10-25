@@ -343,12 +343,11 @@ function renderShelvesContent(container, user, books, userShelves) {
 function renderShelf(shelfName, booksArray, isCustom = false, shelfId = null) {
     const booksHtml = booksArray.length > 0 
         ? booksArray.map(book => {
-            const imageUrl = book.cover || `https://via.placeholder.com/90x130/434E70/ffffff?text=${encodeURIComponent(book.title?.substring(0, 8) || 'Livro')}`;
+            // ✅ IGUAL AO BOOK LIST - Pega a URL diretamente do banco
+            const imageUrl = book.cover || '';
             return `
                 <div class="book-card-shelf" data-book-id="${book.id}">
-                    <img src="${imageUrl}" 
-                         alt="${book.title}" 
-                         onerror="this.src='https://via.placeholder.com/90x130/9dadb7/ffffff?text=Erro'">
+                    ${imageUrl ? `<img src="${imageUrl}" alt="${book.title}" />` : ''}
                     <div class="book-title">${book.title || 'Título não disponível'}</div>
                     <div class="book-author">${book.author || 'Autor desconhecido'}</div>
                 </div>
@@ -375,6 +374,7 @@ function renderShelf(shelfName, booksArray, isCustom = false, shelfId = null) {
         </div>
     `;
 }
+
 
 function setupShelvesEventListeners(container, user, books, userShelves) {
     // Criar nova prateleira
@@ -437,7 +437,7 @@ function setupShelvesEventListeners(container, user, books, userShelves) {
             const bookId = parseInt(bookCard.dataset.bookId);
             if (bookId) {
                 console.log('Navegando para livro:', bookId);
-                navigateTo('details', { bookId, user });
+                navigateTo('book-details', { bookId, user });
             }
             return;
         }

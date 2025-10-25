@@ -443,3 +443,42 @@ INSERT INTO livros (title, author, genre, synopsis, pages, cover, isbn, editora,
 
 SET GLOBAL max_allowed_packet=134217728; 
 SET GLOBAL innodb_buffer_pool_size=268435456; 
+
+USE librain;
+
+-- Trocar TODAS as imagens que estão dando 404
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/A Culpa é das Estrelas.jpg' WHERE title = 'A Culpa é das Estrelas';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/A Garota no Trem.jpg' WHERE title = 'A Garota no Trem';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/A Menina que Roubava Livros.jpg' WHERE title = 'A Menina que Roubava Livros';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/A Metamorfose.jpg' WHERE title = 'A Metamorfose';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/E Não Sobrou Nenhum.jpg' WHERE title = 'E Não Sobrou Nenhum';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Garota Exemplar.jpg' WHERE title = 'Garota Exemplar';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Grande Sertao - Veredas.jpg' WHERE title = 'Grande Sertão: Veredas';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/It - A Coisa.jpg' WHERE title = 'It: A Coisa';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Código Da Vinci.jpg' WHERE title = 'O Código Da Vinci';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Diário de Anne Frank.jpg' WHERE title = 'O Diário de Anne Frank';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Nome da Rosa.jpg' WHERE title = 'O Nome da Rosa';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Pequeno Príncipe.jpg' WHERE title = 'O Pequeno Príncipe';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Poder do Habito.png' WHERE title = 'O Poder do Hábito';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Senhor dos Aneis - A Sociedade do Anel.jpg' WHERE title = 'O Senhor dos Anéis: A Sociedade do Anel';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Sapiens.jpg' WHERE title = 'Sapiens';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/A Casa dos Espíritos.jpg' WHERE title = 'A Casa dos Espíritos';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/A Máquina do Tempo.jpg' WHERE title = 'A Máquina do Tempo';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Dom Casmurro.jpg' WHERE title = 'Dom Casmurro';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Fundação.jpg' WHERE title = 'Fundação';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Jane Eyre.jpg' WHERE title = 'Jane Eyre';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Memórias Póstumas de Brás Cubas.jpg' WHERE title = 'Memórias Póstumas de Brás Cubas';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Anna Karenina.jpg' WHERE title = 'Anna Karenina';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Neuromancer.jpg' WHERE title = 'Neuromancer';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Morro dos Ventos Uivantes.jpg' WHERE title = 'O Morro dos Ventos Uivantes';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Eragon.jpg' WHERE title = 'Eragon';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Os Miseráveis.jpg' WHERE title = 'Os Miseráveis';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Capitães da Areia.jpg' WHERE title = 'Capitães da Areia';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Amor nos Tempos do Cólera.jpg' WHERE title = 'O Amor nos Tempos do Cólera';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Cortiço.jpg' WHERE title = 'O Cortiço';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/O Guia do Mochileiro das Galáxias.jpg' WHERE title = 'O Guia do Mochileiro das Galáxias';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Percy Jackson e o Ladrão de Raios.jpg' WHERE title = 'Percy Jackson e o Ladrão de Raios';
+UPDATE livros SET cover = 'http://localhost:3000/book-covers/Rayuela (O Jogo da Amarelinha).jpg' WHERE title = 'Rayuela (O Jogo da Amarelinha)';
+
+-- Verificar quantos foram atualizados
+SELECT COUNT(*) as total_atualizados FROM livros WHERE cover LIKE 'http://localhost:3000/book-covers/%';
