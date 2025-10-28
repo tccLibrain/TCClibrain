@@ -13,6 +13,11 @@ const PORT = process.env.PORT || 3000;
 // ================================
 // TESTE CRÍTICO DE ROTAS
 // ================================
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true
+}));
+
 console.log('🔍 Registrando rota de teste...');
 
 app.get('/api/test-simple', (req, res) => {
@@ -35,10 +40,6 @@ app.use(express.json({ limit: 'Infinity' }));
 app.use(express.urlencoded({ limit: 'Infinity', extended: true }));
 app.use(express.static('public'));
 
-app.use(cors({
-    origin: 'http://localhost:5173',
-    credentials: true
-}));
 
 // Configurar transportador de email
 const transporter = nodemailer.createTransport({
@@ -87,8 +88,23 @@ app.use(express.urlencoded({ limit: 'Infinity', extended: true }));
 app.use(express.static('public'));
 
 // Configuração do CORS para permitir que o frontend envie cookies de sessão
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: function(origin, callback) {
+        // Permitir requisições sem origin (como mobile apps ou curl)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
 
@@ -106,11 +122,14 @@ app.use(session({
 
 // Configuração do banco de dados usando variáveis de ambiente
 const dbConfig = {
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_DATABASE || 'librain'
+    host: process.env.MYSQLHOST || 'localhost',
+    port: process.env.MYSQLPORT || 3306,
+    user: process.env.MYSQLUSER || 'root',
+    password: process.env.MYSQLPASSWORD || '',
+    database: process.env.MYSQLDATABASE || 'librain'
 };
+
+
 
 // Cria um pool de conexões para melhor desempenho
 let pool;
