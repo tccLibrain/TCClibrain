@@ -482,3 +482,81 @@ UPDATE livros SET cover = 'http://localhost:3000/book-covers/Rayuela (O Jogo da 
 
 -- Verificar quantos foram atualizados
 SELECT COUNT(*) as total_atualizados FROM livros WHERE cover LIKE 'http://localhost:3000/book-covers/%';
+
+USE librain;
+
+-- Remover trigger antigo
+DROP TRIGGER IF EXISTS after_emprestimo_update;
+
+DELIMITER //
+
+-- Criar trigger corrigido
+CREATE TRIGGER after_emprestimo_update
+AFTER UPDATE ON emprestimos
+FOR EACH ROW
+BEGIN
+    -- Se mudou para devolvido, liberar livro
+    IF NEW.status = 'devolvido' AND OLD.status != 'devolvido' THEN
+        UPDATE livros SET disponivel = TRUE WHERE id = NEW.bookId;
+    END IF;
+    
+    -- Se mudou de aguardando_retirada para ativo, marcar livro como indisponível
+    IF NEW.status = 'ativo' AND OLD.status = 'aguardando_retirada' THEN
+        UPDATE livros SET disponivel = FALSE WHERE id = NEW.bookId;
+    END IF;
+END//
+
+DELIMITER ;
+
+USE librain;
+
+-- Ver todos os empréstimos do seu usuário
+SELECT 
+    e.id,
+    e.bookId,
+    l.title as livro,
+    e.cpf,
+    e.status,
+    e.status_leitura,
+    DATE_FORMAT(e.data_retirada, '%d/%m/%Y') as data_retirada,
+    DATE_FORMAT(e.data_prevista_devolucao, '%d/%m/%Y') as data_devolucao
+FROM emprestimos e
+JOIN livros l ON e.bookId = l.id
+WHERE e.cpf = '54946126864'  -- ⚠️ TROQUE PELO SEU CPF
+ORDER BY e.data_retirada DESC;
+
+
+USE librain;
+
+-- Remover trigger antigo
+DROP TRIGGER IF EXISTS after_emprestimo_update;
+
+DELIMITER //
+
+-- ✅ CRIAR TRIGGER COMPLETO E CORRIGIDO
+CREATE TRIGGER after_emprestimo_update
+AFTER UPDATE ON emprestimos
+FOR EACH ROW
+BEGIN
+    -- 1️⃣ Se mudou para devolvido, liberar livro
+    IF NEW.status = 'devolvido' AND OLD.status != 'devolvido' THEN
+        UPDATE livros SET disponivel = TRUE WHERE id = NEW.bookId;
+    END IF;
+    
+    -- 2️⃣ Se mudou de aguardando_retirada para ativo, marcar livro como indisponível
+    IF NEW.status = 'ativo' AND OLD.status = 'aguardando_retirada' THEN
+        UPDATE livros SET disponivel = FALSE WHERE id = NEW.bookId;
+    END IF;
+    
+    -- 3️⃣ ✅ IMPORTANTE: Incrementar livros_lidos quando marcar como lido APÓS devolver
+    IF NEW.status_leitura = 'lido' AND OLD.status_leitura != 'lido' AND NEW.status = 'devolvido' THEN
+        UPDATE usuarios SET livros_lidos = livros_lidos + 1 WHERE cpf = NEW.cpf;
+    END IF;
+    
+    -- 4️⃣ Decrementar se desmarcar como lido
+    IF OLD.status_leitura = 'lido' AND NEW.status_leitura != 'lido' AND NEW.status = 'devolvido' THEN
+        UPDATE usuarios SET livros_lidos = GREATEST(0, livros_lidos - 1) WHERE cpf = NEW.cpf;
+    END IF;
+END//
+
+DELIMITER ;
