@@ -125,13 +125,13 @@ app.use(session({
     }
 }));
 
-// Configuração do banco de dados usando variáveis de ambiente
+// Configuração do banco de dados LOCAL
 const dbConfig = {
-    host: process.env.MYSQLHOST || 'localhost',
-    port: process.env.MYSQLPORT || 3306,
-    user: process.env.MYSQLUSER || 'root',
-    password: process.env.MYSQLPASSWORD || '',
-    database: process.env.MYSQLDATABASE || 'librain'
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_DATABASE || 'librain'
 };
 
 
@@ -1255,13 +1255,16 @@ app.post('/api/loan/cancel-request', isAuthenticated, async (req, res) => {
     }
 
 
-});app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
+});
+
+app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
     const { bookId, status } = req.body;
     const userCpf = req.session.user.cpf;
     
-    console.log('=== MARCAR COMO LIDO (Corrigido) ===');
+    console.log('🔥 MARCAR COMO LIDO');
+    console.log('BookId:', bookId, '| Status:', status, '| CPF:', userCpf);
     
-    if (!['lido', 'nao_terminado'].includes(status)) {
+    if (!['lido', 'nao_terminado', 'lendo'].includes(status)) {
         return res.status(400).json({ error: 'Status inválido' });
     }
     
@@ -1270,46 +1273,59 @@ app.post('/api/loan/cancel-request', isAuthenticated, async (req, res) => {
         connection = await pool.getConnection();
         await connection.beginTransaction();
         
-        
+        // ✅ Buscar empréstimo DEVOLVIDO
         const [emprestimo] = await connection.execute(
             `SELECT id, status_leitura FROM emprestimos 
-             WHERE bookId = ? AND cpf = ? AND status = 'devolvido' 
-             ORDER BY data_real_devolucao DESC LIMIT 1`,
+             WHERE bookId = ? AND cpf = ? AND status = 'devolvido'
+             ORDER BY data_real_devolucao DESC
+             LIMIT 1`,
             [bookId, userCpf]
         );
         
         if (emprestimo.length === 0) {
             await connection.rollback();
             return res.status(400).json({ 
-                error: 'Você só pode marcar como lido após devolver o livro' 
+                error: 'Você precisa ter devolvido este livro para marcar o status de leitura' 
             });
         }
         
         const emprestimoId = emprestimo[0].id;
         const statusAnterior = emprestimo[0].status_leitura;
-
+        
+        console.log(`Status anterior: ${statusAnterior} → Novo: ${status}`);
+        
+        // ✅ APENAS atualizar status de leitura (trigger faz o resto)
         await connection.execute(
             'UPDATE emprestimos SET status_leitura = ?, data_marcado_lido = ? WHERE id = ?',
             [status, status === 'lido' ? new Date() : null, emprestimoId]
         );
         
+        // ❌ REMOVIDO: Incremento/decremento manual (trigger já faz isso)
+        
         await connection.commit();
         
+        // Retornar novo total
+        const [userStats] = await connection.execute(
+            'SELECT livros_lidos FROM usuarios WHERE cpf = ?',
+            [userCpf]
+        );
+        
+        console.log(`📚 Total de livros lidos: ${userStats[0].livros_lidos}`);
+        
         res.json({ 
-            message: status === 'lido' ? 
-                'Parabéns por terminar o livro! 🎉' : 
-                'Status atualizado!' 
+            message: status === 'lido' ? '🎉 Parabéns! Livro marcado como lido!' : 'Status atualizado!',
+            status_leitura: status,
+            livros_lidos: userStats[0].livros_lidos
         });
         
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('❌ Erro ao marcar status:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.error('❌ Erro:', error.message);
+        res.status(500).json({ error: 'Erro ao atualizar status' });
     } finally {
         if (connection) connection.release();
     }
 });
-
 // ================================
 // ROTAS DE NOTIFICAÇÕES
 // ================================
