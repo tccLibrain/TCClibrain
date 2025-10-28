@@ -34,7 +34,6 @@ export async function renderUserDashboard(container) {
             dashboardData = await dashboardResponse.json();
             console.log('Dados do dashboard:', dashboardData);
         } else {
-            // Se a rota não existir, buscar dados manualmente
             console.log('Rota dashboard não encontrada, buscando dados manualmente...');
             dashboardData = await getDashboardDataManually(user.cpf);
         }
@@ -45,14 +44,11 @@ export async function renderUserDashboard(container) {
         return;
     }
 
-    // Renderizar o dashboard
     renderDashboardContent(container, user, dashboardData);
 }
 
-// Função para buscar dados do dashboard manualmente se a API não existir
 async function getDashboardDataManually(userCpf) {
     try {
-        // Buscar todos os livros e filtrar pelo usuário
         const booksResponse = await fetch('http://localhost:3000/api/books', {
             credentials: 'include'
         });
@@ -63,7 +59,6 @@ async function getDashboardDataManually(userCpf) {
         
         const allBooks = await booksResponse.json();
         
-        // Filtrar livros por status
         const emprestados = allBooks.filter(book => 
             book.emprestadoPara === userCpf
         );
@@ -72,7 +67,6 @@ async function getDashboardDataManually(userCpf) {
             book.queue && book.queue.includes(userCpf) && book.emprestadoPara !== userCpf
         );
         
-        // Para devoluções pendentes, assumir que não temos essa informação
         const devolucoesPendentes = [];
         
         return {
@@ -110,350 +104,433 @@ async function getDashboardDataManually(userCpf) {
 function renderDashboardContent(container, user, dashboardData) {
     const { emprestados, reservas, devolucoesPendentes } = dashboardData;
     
-    console.log('Renderizando dashboard:', {
-        emprestados: emprestados.length,
-        reservas: reservas.length,
-        pendentes: devolucoesPendentes.length
+    const aguardandoAprovacao = emprestados.filter(e => e.status === 'aguardando_retirada');
+    const emprestimosAtivos = emprestados.filter(e => e.status === 'ativo');
+    const devolucoesPendentesFromEmprestimos = emprestados.filter(e => e.status === 'pendente_devolucao');
+    
+    const todasDevolucoesPendentes = [
+        ...devolucoesPendentes,
+        ...devolucoesPendentesFromEmprestimos
+    ];
+    
+    console.log('📊 Dashboard separado:', {
+        aguardandoAprovacao: aguardandoAprovacao.length,
+        emprestimosAtivos: emprestimosAtivos.length,
+        devolucoesPendentes: todasDevolucoesPendentes.length,
+        reservas: reservas.length
     });
 
-    const emprestimosHtml = emprestados.length
-        ? emprestados.map(emprestimo => {
-            const isPendente = emprestimo.status === 'pendente_devolucao';
-            return `
-                <li class="dashboard-item">
-                    <div class="item-info">
-                        <strong>${emprestimo.title}</strong>
-                        <span class="item-author">por ${emprestimo.author}</span>
-                        ${emprestimo.data_devolucao_formatada ? 
-                            `<small class="item-date">Devolução: ${emprestimo.data_devolucao_formatada}</small>` : 
-                            ''
-                        }
-                        <span class="item-status ${isPendente ? 'status-pending' : 'status-active'}">
-                            ${isPendente ? 'Devolução Solicitada' : 'Empréstimo Ativo'}
-                        </span>
+    const aguardandoHtml = aguardandoAprovacao.length
+        ? aguardandoAprovacao.map(emprestimo => `
+                <div class="dashboard-card">
+                    <div class="card-content">
+                        <div class="book-icon">📘</div>
+                        <div class="book-details">
+                            <h3 class="book-title">${emprestimo.title}</h3>
+                            <p class="book-author">${emprestimo.author}</p>
+                            ${emprestimo.data_devolucao_formatada ? 
+                                `<p class="book-date">📅 ${emprestimo.data_devolucao_formatada}</p>` : 
+                                ''
+                            }
+                            <span class="badge badge-warning">⏳ Aguardando Aprovação</span>
+                        </div>
                     </div>
-                    <div class="item-actions">
-                        ${!isPendente ? `
-                            <button class="btn-devolver btn-small" data-bookid="${emprestimo.bookId}">
-                                Solicitar Devolução
-                            </button>
-                        ` : `
-                            <button class="btn-small" disabled>
-                                Aguardando Aprovação
-                            </button>
-                        `}
-                        <button class="btn-view btn-small" data-bookid="${emprestimo.bookId}">
-                            Ver Detalhes
+                    <div class="card-actions">
+                        <button class="btn btn-danger btn-cancelar-solicitacao" data-bookid="${emprestimo.bookId}">
+                            ✕ Cancelar
+                        </button>
+                        <button class="btn btn-secondary btn-view" data-bookid="${emprestimo.bookId}">
+                            👁 Detalhes
                         </button>
                     </div>
-                </li>
-            `;
-        }).join('')
-        : '<li class="no-items">Nenhum empréstimo ativo no momento.</li>';
+                </div>
+            `).join('')
+        : '<div class="empty-state">📭 Nenhuma solicitação pendente</div>';
+
+    const emprestimosAtivosHtml = emprestimosAtivos.length
+        ? emprestimosAtivos.map(emprestimo => `
+                <div class="dashboard-card">
+                    <div class="card-content">
+                        <div class="book-icon">📗</div>
+                        <div class="book-details">
+                            <h3 class="book-title">${emprestimo.title}</h3>
+                            <p class="book-author">${emprestimo.author}</p>
+                            ${emprestimo.data_devolucao_formatada ? 
+                                `<p class="book-date">📅 ${emprestimo.data_devolucao_formatada}</p>` : 
+                                ''
+                            }
+                            <span class="badge badge-success">✓ Empréstimo Ativo</span>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn btn-primary btn-devolver" data-bookid="${emprestimo.bookId}">
+                            ↩ Devolver
+                        </button>
+                        <button class="btn btn-secondary btn-view" data-bookid="${emprestimo.bookId}">
+                            👁 Detalhes
+                        </button>
+                    </div>
+                </div>
+            `).join('')
+        : '<div class="empty-state">📚 Nenhum empréstimo ativo</div>';
 
     const reservasHtml = reservas.length
         ? reservas.map(reserva => `
-                <li class="dashboard-item">
-                    <div class="item-info">
-                        <strong>${reserva.title}</strong>
-                        <span class="item-author">por ${reserva.author}</span>
-                        <small class="item-position">Posição na fila: ${reserva.posicao}</small>
-                        <span class="item-status status-waiting">Aguardando</span>
+                <div class="dashboard-card">
+                    <div class="card-content">
+                        <div class="book-icon">📙</div>
+                        <div class="book-details">
+                            <h3 class="book-title">${reserva.title}</h3>
+                            <p class="book-author">${reserva.author}</p>
+                            <p class="book-position">🎯 Posição na fila: ${reserva.posicao}</p>
+                            <span class="badge badge-info">⏳ Aguardando</span>
+                        </div>
                     </div>
-                    <div class="item-actions">
-                        <button class="btn-cancelar-reserva btn-small btn-danger" data-bookid="${reserva.bookId}">
-                            Cancelar Reserva
+                    <div class="card-actions">
+                        <button class="btn btn-danger btn-cancelar-reserva" data-bookid="${reserva.bookId}">
+                            ✕ Cancelar
                         </button>
-                        <button class="btn-view btn-small" data-bookid="${reserva.bookId}">
-                            Ver Detalhes
+                        <button class="btn btn-secondary btn-view" data-bookid="${reserva.bookId}">
+                            👁 Detalhes
                         </button>
                     </div>
-                </li>
+                </div>
             `).join('')
-        : '<li class="no-items">Você não está em nenhuma fila de espera.</li>';
+        : '<div class="empty-state">📋 Nenhuma reserva ativa</div>';
 
-    const pendentesHtml = devolucoesPendentes.length
-        ? devolucoesPendentes.map(pendente => `
-                <li class="dashboard-item">
-                    <div class="item-info">
-                        <strong>${pendente.title}</strong>
-                        <span class="item-author">por ${pendente.author}</span>
-                        <span class="item-status status-pending">Aguardando Aprovação</span>
+    const pendentesHtml = todasDevolucoesPendentes.length
+        ? todasDevolucoesPendentes.map(pendente => `
+                <div class="dashboard-card">
+                    <div class="card-content">
+                        <div class="book-icon">📕</div>
+                        <div class="book-details">
+                            <h3 class="book-title">${pendente.title}</h3>
+                            <p class="book-author">${pendente.author}</p>
+                            <span class="badge badge-warning">⏳ Aguardando Aprovação</span>
+                        </div>
                     </div>
-                    <div class="item-actions">
-                        <button class="btn-view btn-small" data-bookid="${pendente.bookId}">
-                            Ver Detalhes
+                    <div class="card-actions">
+                        <button class="btn btn-secondary btn-view" data-bookid="${pendente.bookId}">
+                            👁 Detalhes
                         </button>
                     </div>
-                </li>
+                </div>
             `).join('')
-        : '<li class="no-items">Nenhuma devolução pendente.</li>';
+        : '<div class="empty-state">✅ Nenhuma devolução pendente</div>';
 
     container.innerHTML = `
         <style>
+            .dashboard-container {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            
             .dashboard-header {
                 text-align: center;
-                margin-bottom: 20px;
-                padding: 20px;
-                background: var(--branco);
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                margin-top: 15px;
+                margin-bottom: 30px;
+                padding: 30px;
+                background: linear-gradient(135deg, #434e70 0%, #5a6688 100%);
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                color: white;
             }
             
             .dashboard-header h1 {
-                color: var(--azul-escuro);
                 margin: 0 0 10px 0;
+                font-size: 28px;
+                font-weight: 700;
             }
             
-            .dashboard-header .user-greeting {
-                color: var(--azul-original);
+            .user-greeting {
                 font-size: 18px;
+                opacity: 0.95;
+            }
+            
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 16px;
+                margin-bottom: 30px;
+            }
+            
+            .stat-card {
+                background: white;
+                padding: 20px;
+                border-radius: 12px;
+                text-align: center;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                transition: transform 0.3s;
+            }
+            
+            .stat-card:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 4px 12px rgba(67, 78, 112, 0.2);
+            }
+            
+            .stat-number {
+                display: block;
+                font-size: 32px;
+                font-weight: 700;
+                color: #434e70;
+                margin-bottom: 8px;
+            }
+            
+            .stat-label {
+                font-size: 14px;
+                color: #718096;
+                font-weight: 600;
             }
             
             .dashboard-section {
-                background: var(--branco);
+                background: white;
                 border-radius: 12px;
-                padding: 20px;
-                margin-bottom: 20px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-
+                padding: 24px;
+                margin-bottom: 24px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             }
             
-            .dashboard-section h2 {
-                color: var(--azul-escuro);
-                margin: 0 0 15px 0;
-                padding-bottom: 10px;
-                border-bottom: 2px solid var(--cinza-claro);
-            }
-            
-            .dashboard-item {
+            .section-header {
                 display: flex;
-                justify-content: space-between;
                 align-items: center;
-                padding: 15px 0;
-                border-bottom: 1px solid var(--cinza-claro);
+                gap: 10px;
+                margin-bottom: 20px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid #e2e8f0;
             }
             
-            .dashboard-item:last-child {
-                border-bottom: none;
+            .section-header h2 {
+                margin: 0;
+                color: #2d3748;
+                font-size: 20px;
+                font-weight: 700;
             }
             
-            .item-info {
+            .dashboard-card {
+                background: #f7fafc;
+                border-radius: 12px;
+                padding: 16px;
+                margin-bottom: 16px;
+                border: 2px solid #e2e8f0;
+                transition: all 0.3s;
+            }
+            
+            .dashboard-card:hover {
+                border-color: #434e70;
+                box-shadow: 0 4px 12px rgba(67, 78, 112, 0.15);
+            }
+            
+            .card-content {
+                display: flex;
+                gap: 16px;
+                margin-bottom: 12px;
+            }
+            
+            .book-icon {
+                font-size: 48px;
+                flex-shrink: 0;
+            }
+            
+            .book-details {
                 flex: 1;
             }
             
-            .item-info strong {
-                display: block;
-                color: var(--azul-escuro);
+            .book-title {
+                margin: 0 0 6px 0;
+                color: #2d3748;
                 font-size: 16px;
-                margin-bottom: 4px;
+                font-weight: 700;
             }
             
-            .item-author {
-                display: block;
-                color: var(--azul-claro);
+            .book-author {
+                margin: 0 0 6px 0;
+                color: #718096;
                 font-size: 14px;
-                margin-bottom: 4px;
             }
             
-            .item-date, .item-position {
-                display: block;
-                color: var(--cinza-escuro);
-                font-size: 12px;
-                margin-bottom: 4px;
+            .book-date, .book-position {
+                margin: 0 0 8px 0;
+                color: #4a5568;
+                font-size: 13px;
+                font-weight: 600;
             }
             
-            .item-status {
+            .badge {
                 display: inline-block;
-                padding: 2px 8px;
-                border-radius: 10px;
-                font-size: 11px;
-                font-weight: bold;
-                text-transform: uppercase;
+                padding: 4px 12px;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 700;
             }
             
-            .status-active {
-                background-color: #d4edda;
+            .badge-success {
+                background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
                 color: #155724;
             }
             
-            .status-pending {
-                background-color: #fff3cd;
+            .badge-warning {
+                background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
                 color: #856404;
             }
             
-            .status-waiting {
-                background-color: #cce7ff;
-                color: #004085;
+            .badge-info {
+                background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+                color: #0c5460;
             }
             
-            .item-actions {
+            .card-actions {
                 display: flex;
-                gap: 8px;
+                gap: 10px;
                 flex-wrap: wrap;
             }
             
-            .btn-small {
-                padding: 6px 12px;
-                font-size: 12px;
+            .btn {
+                padding: 8px 16px;
                 border: none;
-                border-radius: 6px;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 600;
                 cursor: pointer;
-                transition: background-color 0.3s;
+                transition: all 0.3s;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
             }
             
-            .btn-view {
-                background-color: var(--azul-original);
+            .btn-primary {
+                background: linear-gradient(135deg, #28a745 0%, #20963d 100%);
                 color: white;
             }
             
-            .btn-view:hover {
-                background-color: var(--azul-escuro);
+            .btn-primary:hover {
+                background: linear-gradient(135deg, #218838 0%, #1e7e34 100%);
+                transform: translateY(-2px);
             }
             
-            .btn-devolver {
-                background-color: #28a745;
+            .btn-secondary {
+                background: linear-gradient(135deg, #434e70 0%, #5a6688 100%);
                 color: white;
             }
             
-            .btn-devolver:hover {
-                background-color: #218838;
+            .btn-secondary:hover {
+                background: linear-gradient(135deg, #2d3748 0%, #434e70 100%);
+                transform: translateY(-2px);
             }
             
             .btn-danger {
-                background-color: #dc3545;
+                background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
                 color: white;
             }
             
             .btn-danger:hover {
-                background-color: #c82333;
+                background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+                transform: translateY(-2px);
             }
             
-            .no-items {
+            .empty-state {
                 text-align: center;
-                color: var(--azul-claro);
+                padding: 40px;
+                color: #718096;
+                font-size: 16px;
                 font-style: italic;
-                padding: 20px;
-            }
-            
-            .stats-summary {
-                display: flex;
-                justify-content: space-around;
-                background: var(--cinza-claro);
-                padding: 15px;
-                border-radius: 8px;
-                margin-bottom: 15px;
-            }
-            
-            .stat-item {
-                text-align: center;
-                background: var(branco);
-            }
-            
-            .stat-number {
-                font-size: 24px;
-                font-weight: bold;
-                color: var(--azul-escuro);
-                display: block;
-            }
-            
-            .stat-label {
-                font-size: 12px;
-                color: var(--azul-claro);
             }
             
             @media (max-width: 768px) {
-                .dashboard-item {
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: 10px;
+                .dashboard-container {
+                    padding: 12px;
                 }
                 
-                .item-actions {
-                    align-self: stretch;
+                .dashboard-header {
+                    padding: 20px;
+                }
+                
+                .dashboard-header h1 {
+                    font-size: 24px;
+                }
+                
+                .card-content {
+                    flex-direction: column;
+                    align-items: center;
+                    text-align: center;
+                }
+                
+                .card-actions {
                     justify-content: center;
+                }
+                
+                .stats-grid {
+                    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
                 }
             }
         </style>
         
-        <div class="dashboard-header">
-            <h1>Meu Dashboard</h1>
-            <div class="user-greeting">Bem-vindo, ${user.nome}!</div>
-        </div>
-
-        <div class="stats-summary">
-            <div class="stat-item">
-                <span class="stat-number">${emprestados.length}</span>
-                <span class="stat-label">Empréstimos</span>
+        <div class="dashboard-container">
+            <div class="dashboard-header">
+                <h1>🏠 Meu Dashboard</h1>
+                <div class="user-greeting">Bem-vindo, ${user.nome}!</div>
             </div>
-            <div class="stat-item">
-                <span class="stat-number">${reservas.length}</span>
-                <span class="stat-label">Reservas</span>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-number">${aguardandoAprovacao.length + emprestimosAtivos.length}</span>
+                    <span class="stat-label">📚 Empréstimos</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">${reservas.length}</span>
+                    <span class="stat-label">📋 Reservas</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">${user.livros_lidos || 0}</span>
+                    <span class="stat-label">✅ Livros Lidos</span>
+                </div>
             </div>
-            <div class="stat-item">
-                <span class="stat-number">${user.livros_lidos || 0}</span>
-                <span class="stat-label">Livros Lidos</span>
-            </div>
-        </div>
 
-        <div class="dashboard-section">
-            <h2>Meus Empréstimos Ativos</h2>
-            <ul style="list-style: none; padding: 0;">
-                ${emprestimosHtml}
-            </ul>
-        </div>
+            ${aguardandoAprovacao.length > 0 ? `
+                <div class="dashboard-section">
+                    <div class="section-header">
+                        <h2>⏳ Aguardando Aprovação</h2>
+                    </div>
+                    ${aguardandoHtml}
+                </div>
+            ` : ''}
 
-        <div class="dashboard-section">
-            <h2>Minhas Reservas</h2>
-            <ul style="list-style: none; padding: 0;">
-                ${reservasHtml}
-            </ul>
-        </div>
-
-        ${devolucoesPendentes.length > 0 ? `
             <div class="dashboard-section">
-                <h2>Devoluções Pendentes</h2>
-                <ul style="list-style: none; padding: 0;">
-                    ${pendentesHtml}
-                </ul>
+                <div class="section-header">
+                    <h2>📗 Empréstimos Ativos</h2>
+                </div>
+                ${emprestimosAtivosHtml}
             </div>
-        ` : ''}
+
+            ${todasDevolucoesPendentes.length > 0 ? `
+                <div class="dashboard-section">
+                    <div class="section-header">
+                        <h2>📕 Devoluções Pendentes</h2>
+                    </div>
+                    ${pendentesHtml}
+                </div>
+            ` : ''}
+
+            <div class="dashboard-section">
+                <div class="section-header">
+                    <h2>📋 Minhas Reservas</h2>
+                </div>
+                ${reservasHtml}
+            </div>
+        </div>
     `;
 
-    // Event Listeners
     setupDashboardEventListeners(container, user);
 }
 
 function setupDashboardEventListeners(container, user) {
-    // Navegação
-    const voltarLivros = container.querySelector('#voltar-livros');
-    const minhasPrateleiras = container.querySelector('#minhas-prateleiras');
-    const meuPerfil = container.querySelector('#meu-perfil');
-
-    if (voltarLivros) {
-        voltarLivros.addEventListener('click', () => navigateTo('books', { user }));
-    }
-
-    if (minhasPrateleiras) {
-        minhasPrateleiras.addEventListener('click', () => navigateTo('shelves', { user }));
-    }
-
-    if (meuPerfil) {
-        meuPerfil.addEventListener('click', () => navigateTo('profile', { user }));
-    }
-
-    // Botões de ação nos itens
     container.addEventListener('click', async (e) => {
         const bookId = e.target.dataset.bookid;
         
         if (e.target.classList.contains('btn-view') && bookId) {
-            // Ver detalhes do livro
             navigateTo('details', { bookId: parseInt(bookId), user });
         }
         
         else if (e.target.classList.contains('btn-devolver') && bookId) {
-            // Solicitar devolução
             if (confirm('Deseja realmente solicitar a devolução deste livro?')) {
                 try {
                     const response = await fetch('http://localhost:3000/api/loan/request-return', {
@@ -479,7 +556,6 @@ function setupDashboardEventListeners(container, user) {
         }
         
         else if (e.target.classList.contains('btn-cancelar-reserva') && bookId) {
-            // Cancelar reserva
             if (confirm('Deseja realmente cancelar esta reserva?')) {
                 try {
                     const response = await fetch('http://localhost:3000/api/loan/cancel-request', {
@@ -497,319 +573,34 @@ function setupDashboardEventListeners(container, user) {
                         const error = await response.json();
                         alert(`Erro: ${error.error || 'Erro desconhecido'}`);
                     }
-                } catch (error) {// Na função renderDashboardContent, remover esta seção do HTML:
-
-                    container.innerHTML = `
-                        <style>
-                            .dashboard-header {
-                                text-align: center;
-                                margin-bottom: 20px;
-                                padding: 20px;
-                                background: var(--branco);
-                                border-radius: 12px;
-                                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                                margin-top: 15px;
-                            }
-                            
-                            .dashboard-header h1 {
-                                color: var(--azul-escuro);
-                                margin: 0 0 10px 0;
-                            }
-                            
-                            .dashboard-header .user-greeting {
-                                color: var(--azul-original);
-                                font-size: 18px;
-                            }
-                            
-                            .dashboard-section {
-                                background: var(--branco);
-                                border-radius: 12px;
-                                padding: 20px;
-                                margin-bottom: 20px;
-                                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                            }
-                            
-                            .dashboard-section h2 {
-                                color: var(--azul-escuro);
-                                margin: 0 0 15px 0;
-                                padding-bottom: 10px;
-                                border-bottom: 2px solid var(--cinza-claro);
-                            }
-                            
-                            .dashboard-item {
-                                display: flex;
-                                justify-content: space-between;
-                                align-items: center;
-                                padding: 15px 0;
-                                border-bottom: 1px solid var(--cinza-claro);
-                            }
-                            
-                            .dashboard-item:last-child {
-                                border-bottom: none;
-                            }
-                            
-                            .item-info {
-                                flex: 1;
-                            }
-                            
-                            .item-info strong {
-                                display: block;
-                                color: var(--azul-escuro);
-                                font-size: 16px;
-                                margin-bottom: 4px;
-                            }
-                            
-                            .item-author {
-                                display: block;
-                                color: var(--azul-claro);
-                                font-size: 14px;
-                                margin-bottom: 4px;
-                            }
-                            
-                            .item-date, .item-position {
-                                display: block;
-                                color: var(--cinza-escuro);
-                                font-size: 12px;
-                                margin-bottom: 4px;
-                            }
-                            
-                            .item-status {
-                                display: inline-block;
-                                padding: 2px 8px;
-                                border-radius: 10px;
-                                font-size: 11px;
-                                font-weight: bold;
-                                text-transform: uppercase;
-                            }
-                            
-                            .status-active {
-                                background-color: #d4edda;
-                                color: #155724;
-                            }
-                            
-                            .status-pending {
-                                background-color: #fff3cd;
-                                color: #856404;
-                            }
-                            
-                            .status-waiting {
-                                background-color: #cce7ff;
-                                color: #004085;
-                            }
-                            
-                            .item-actions {
-                                display: flex;
-                                gap: 8px;
-                                flex-wrap: wrap;
-                            }
-                            
-                            .btn-small {
-                                padding: 6px 12px;
-                                font-size: 12px;
-                                border: none;
-                                border-radius: 6px;
-                                cursor: pointer;
-                                transition: background-color 0.3s;
-                            }
-                            
-                            .btn-view {
-                                background-color: var(--azul-original);
-                                color: white;
-                            }
-                            
-                            .btn-view:hover {
-                                background-color: var(--azul-escuro);
-                            }
-                            
-                            .btn-devolver {
-                                background-color: #28a745;
-                                color: white;
-                            }
-                            
-                            .btn-devolver:hover {
-                                background-color: #218838;
-                            }
-                            
-                            .btn-danger {
-                                background-color: #dc3545;
-                                color: white;
-                            }
-                            
-                            .btn-danger:hover {
-                                background-color: #c82333;
-                            }
-                            
-                            .no-items {
-                                text-align: center;
-                                color: var(--azul-claro);
-                                font-style: italic;
-                                padding: 20px;
-                            }
-                            
-                            .stats-summary {
-                                display: flex;
-                                justify-content: space-around;
-                                background: var(--cinza-claro);
-                                padding: 15px;
-                                border-radius: 8px;
-                                margin-bottom: 15px;
-                            }
-                            
-                            .stat-item {
-                                text-align: center;
-                            }
-                            
-                            .stat-number {
-                                font-size: 24px;
-                                font-weight: bold;
-                                color: var(--azul-escuro);
-                                display: block;
-                            }
-                            
-                            .stat-label {
-                                font-size: 12px;
-                                color: var(--azul-claro);
-                            }
-                            
-                            @media (max-width: 768px) {
-                                .dashboard-item {
-                                    flex-direction: column;
-                                    align-items: flex-start;
-                                    gap: 10px;
-                                }
-                                
-                                .item-actions {
-                                    align-self: stretch;
-                                    justify-content: center;
-                                }
-                            }
-                        </style>
-                        
-                        <div class="dashboard-header">
-                            <h1>Meu Dashboard</h1>
-                            <div class="user-greeting">Bem-vindo, ${user.nome}!</div>
-                        </div>
-                    
-                        <div class="stats-summary">
-                            <div class="stat-item">
-                                <span class="stat-number">${emprestados.length}</span>
-                                <span class="stat-label">Empréstimos</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-number">${reservas.length}</span>
-                                <span class="stat-label">Reservas</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-number">${user.livros_lidos || 0}</span>
-                                <span class="stat-label">Livros Lidos</span>
-                            </div>
-                        </div>
-                    
-                        <div class="dashboard-section">
-                            <h2>Meus Empréstimos Ativos</h2>
-                            <ul style="list-style: none; padding: 0;">
-                                ${emprestimosHtml}
-                            </ul>
-                        </div>
-                    
-                        <div class="dashboard-section">
-                            <h2>Minhas Reservas</h2>
-                            <ul style="list-style: none; padding: 0;">
-                                ${reservasHtml}
-                            </ul>
-                        </div>
-                    
-                        ${devolucoesPendentes.length > 0 ? `
-                            <div class="dashboard-section">
-                                <h2>Devoluções Pendentes</h2>
-                                <ul style="list-style: none; padding: 0;">
-                                    ${pendentesHtml}
-                                </ul>
-                            </div>
-                        ` : ''}
-                    `;
-                    
-                    // E na função setupDashboardEventListeners, remover estas partes:
-                    
-                    function setupDashboardEventListeners(container, user) {
-                        // Remover toda esta seção:
-                        // const voltarLivros = container.querySelector('#voltar-livros');
-                        // const minhasPrateleiras = container.querySelector('#minhas-prateleiras');
-                        // const meuPerfil = container.querySelector('#meu-perfil');
-                    
-                        // if (voltarLivros) {
-                        //     voltarLivros.addEventListener('click', () => navigateTo('books', { user }));
-                        // }
-                    
-                        // if (minhasPrateleiras) {
-                        //     minhasPrateleiras.addEventListener('click', () => navigateTo('shelves', { user }));
-                        // }
-                    
-                        // if (meuPerfil) {
-                        //     meuPerfil.addEventListener('click', () => navigateTo('profile', { user }));
-                        // }
-                    
-                        // Manter apenas os botões de ação nos itens
-                        container.addEventListener('click', async (e) => {
-                            const bookId = e.target.dataset.bookid;
-                            
-                            if (e.target.classList.contains('btn-view') && bookId) {
-                                navigateTo('details', { bookId: parseInt(bookId), user });
-                            }
-                            
-                            else if (e.target.classList.contains('btn-devolver') && bookId) {
-                                if (confirm('Deseja realmente solicitar a devolução deste livro?')) {
-                                    try {
-                                        const response = await fetch('http://localhost:3000/api/loan/request-return', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            credentials: 'include',
-                                            body: JSON.stringify({ bookId: parseInt(bookId) })
-                                        });
-                                        
-                                        if (response.ok) {
-                                            const result = await response.json();
-                                            alert(result.message || 'Solicitação de devolução enviada!');
-                                            renderUserDashboard(container);
-                                        } else {
-                                            const error = await response.json();
-                                            alert(`Erro: ${error.error || 'Erro desconhecido'}`);
-                                        }
-                                    } catch (error) {
-                                        console.error('Erro ao solicitar devolução:', error);
-                                        alert('Erro de conexão ao solicitar devolução.');
-                                    }
-                                }
-                            }
-                            
-                            else if (e.target.classList.contains('btn-cancelar-reserva') && bookId) {
-                                if (confirm('Deseja realmente cancelar esta reserva?')) {
-                                    try {
-                                        const response = await fetch('http://localhost:3000/api/loan/cancel-request', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            credentials: 'include',
-                                            body: JSON.stringify({ bookId: parseInt(bookId) })
-                                        });
-                                        
-                                        if (response.ok) {
-                                            const result = await response.json();
-                                            alert(result.message || 'Reserva cancelada!');
-                                            renderUserDashboard(container);
-                                        } else {
-                                            const error = await response.json();
-                                            alert(`Erro: ${error.error || 'Erro desconhecido'}`);
-                                        }
-                                    } catch (error) {
-                                        console.error('Erro ao cancelar reserva:', error);
-                                        alert('Erro de conexão ao cancelar reserva.');
-                                    }
-                                }
-                            }
-                        });
-                    }
+                } catch (error) {
                     console.error('Erro ao cancelar reserva:', error);
                     alert('Erro de conexão ao cancelar reserva.');
+                }
+            }
+        }
+        
+        else if (e.target.classList.contains('btn-cancelar-solicitacao') && bookId) {
+            if (confirm('Deseja realmente cancelar esta solicitação de empréstimo?')) {
+                try {
+                    const response = await fetch('http://localhost:3000/api/loan/cancel-request', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ bookId: parseInt(bookId) })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        alert(result.message || 'Solicitação cancelada!');
+                        renderUserDashboard(container);
+                    } else {
+                        const error = await response.json();
+                        alert(`Erro: ${error.error || 'Erro desconhecido'}`);
+                    }
+                } catch (error) {
+                    console.error('Erro ao cancelar solicitação:', error);
+                    alert('Erro de conexão ao cancelar solicitação.');
                 }
             }
         }

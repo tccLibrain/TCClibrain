@@ -588,20 +588,64 @@ app.post('/api/logout', (req, res) => {
 // ROTAS DE LIVROS
 // ================================
 
-app.get('/api/books/:id/user-status', isAuthenticated, async (req, res) => {
-    const { id } = req.params;
-    const userCpf = req.session.user.cpf;
-    
-    console.log('🔍 Verificando status - BookId:', id, 'CPF:', userCpf);
+
+// 🆕 LISTAR TODOS OS LIVROS
+app.get('/api/books', async (req, res) => {
+    console.log('📚 GET /api/books - Buscando todos os livros');
     
     let connection;
     try {
         connection = await pool.getConnection();
         
-        // 1️⃣ Buscar empréstimo mais recente (qualquer status relevante)
+        const [books] = await connection.execute(`
+            SELECT 
+                l.*,
+                CASE 
+                    WHEN e.id IS NOT NULL AND e.status IN ('ativo', 'aguardando_retirada') THEN false
+                    ELSE true 
+                END as available
+            FROM livros l
+            LEFT JOIN emprestimos e ON l.id = e.bookId 
+                AND e.status IN ('ativo', 'aguardando_retirada')
+            ORDER BY l.title ASC
+        `);
+        
+        const formattedBooks = books.map(book => ({
+            ...book,
+            available: book.available === 1 || book.available === true
+        }));
+        
+        console.log(`✅ Retornando ${formattedBooks.length} livros`);
+        res.json(formattedBooks);
+        
+    } catch (error) {
+        console.error('❌ Erro ao buscar livros:', error);
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: error.message 
+        });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+
+app.get('/api/books/:id/user-status', isAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    const userCpf = req.session.user.cpf;
+    
+    console.log('🔍 === VERIFICANDO STATUS DO USUÁRIO ===');
+    console.log('BookId:', id, 'CPF:', userCpf);
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        // 1️⃣ Buscar empréstimo ativo/aguardando do usuário para este livro
         const [emprestimo] = await connection.execute(`
-            SELECT status, data_retirada, data_prevista_devolucao,
-                   DATE_FORMAT(data_retirada, '%d/%m/%Y') as data_formatada
+            SELECT id, status, data_retirada, data_prevista_devolucao,
+                   DATE_FORMAT(data_retirada, '%d/%m/%Y') as data_formatada,
+                   DATE_FORMAT(data_prevista_devolucao, '%d/%m/%Y') as data_devolucao_formatada
             FROM emprestimos 
             WHERE bookId = ? AND cpf = ? 
             AND status IN ('aguardando_retirada', 'ativo', 'pendente_devolucao')
@@ -609,7 +653,7 @@ app.get('/api/books/:id/user-status', isAuthenticated, async (req, res) => {
             LIMIT 1
         `, [id, userCpf]);
         
-        console.log('📊 Empréstimo encontrado:', emprestimo[0]?.status || 'nenhum');
+        console.log('📊 Empréstimo ativo encontrado:', emprestimo.length > 0 ? emprestimo[0] : 'nenhum');
         
         // 2️⃣ Buscar reserva na fila
         const [reserva] = await connection.execute(`
@@ -620,83 +664,94 @@ app.get('/api/books/:id/user-status', isAuthenticated, async (req, res) => {
         
         console.log('📋 Reserva encontrada:', reserva.length > 0 ? `posição ${reserva[0]?.posicao}` : 'nenhuma');
         
-        // 3️⃣ Montar resposta detalhada
-        const response = {
-            hasLoan: emprestimo.length > 0,
-            loanStatus: emprestimo[0]?.status || null,
-            loanDate: emprestimo[0]?.data_formatada || null,
-            hasReservation: reserva.length > 0,
-            queuePosition: reserva[0]?.posicao || null
+        // 3️⃣ Buscar último empréstimo devolvido e seu status de leitura
+        const [ultimaDevolucao] = await connection.execute(`
+            SELECT status_leitura, DATE_FORMAT(data_real_devolucao, '%d/%m/%Y') as data_devolucao
+            FROM emprestimos 
+            WHERE bookId = ? AND cpf = ? AND status = 'devolvido'
+            ORDER BY data_real_devolucao DESC 
+            LIMIT 1
+        `, [id, userCpf]);
+        
+        console.log('📖 Última devolução:', ultimaDevolucao.length > 0 ? ultimaDevolucao[0] : 'nenhuma');
+        
+        // 4️⃣ Determinar flags booleanas baseadas no status
+        let response = {
+            isAwaitingPickup: false,
+            isActive: false,
+            isPendingReturn: false,
+            isInQueue: false,
+            queuePosition: 0,
+            loanDate: null,
+            returnDate: null, // ✅ IMPORTANTE: Inicializar como null
+            hasReturnedBefore: false,
+            lastLoanStatus: null
         };
         
-        console.log('✅ Resposta:', response);
+        // Se tem empréstimo ativo/pendente
+        if (emprestimo.length > 0) {
+            const status = emprestimo[0].status;
+            
+            if (status === 'aguardando_retirada') {
+                response.isAwaitingPickup = true;
+                response.loanDate = emprestimo[0].data_formatada;
+                console.log('✅ Status: AGUARDANDO RETIRADA');
+            } 
+            else if (status === 'ativo') {
+                response.isActive = true;
+                response.loanDate = emprestimo[0].data_formatada;
+                response.returnDate = emprestimo[0].data_devolucao_formatada; // ✅ Data do empréstimo ATIVO
+                console.log('✅ Status: ATIVO - Devolução:', emprestimo[0].data_devolucao_formatada);
+            } 
+            else if (status === 'pendente_devolucao') {
+                response.isPendingReturn = true;
+                response.loanDate = emprestimo[0].data_formatada;
+                console.log('✅ Status: PENDENTE DEVOLUÇÃO');
+            }
+        }
+        
+        // Se tem reserva
+        if (reserva.length > 0) {
+            response.isInQueue = true;
+            response.queuePosition = reserva[0].posicao;
+            console.log('✅ Status: NA FILA - Posição', reserva[0].posicao);
+        }
+        
+        // ✅ CORREÇÃO: Se já devolveu antes (mas NÃO sobrescrever returnDate de empréstimo ativo)
+        if (ultimaDevolucao.length > 0) {
+            response.hasReturnedBefore = true;
+            response.lastLoanStatus = ultimaDevolucao[0].status_leitura;
+            
+            // ⚠️ IMPORTANTE: Só preencher returnDate se NÃO tiver empréstimo ativo
+            if (!response.returnDate) {
+                response.returnDate = ultimaDevolucao[0].data_devolucao;
+            }
+            
+            console.log('✅ Já devolveu antes - Status de leitura:', ultimaDevolucao[0].status_leitura);
+        }
+        
+        console.log('📤 Resposta final:', response);
         
         res.json(response);
         
     } catch (error) {
         console.error('❌ Erro ao verificar status:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            isAwaitingPickup: false,
+            isActive: false,
+            isPendingReturn: false,
+            isInQueue: false,
+            queuePosition: 0,
+            hasReturnedBefore: false,
+            lastLoanStatus: null,
+            returnDate: null
+        });
     } finally {
         if (connection) connection.release();
     }
 });
 
-app.get('/api/books', async (req, res) => {
-    console.log('=== DEBUG: Requisição para /api/books recebida ===');
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // ✅ CORRIGIDO: 
-        // 1. Status 'aguardando_retirada' também torna o livro indisponível
-        // 2. r.id corrigido para r.bookId
-        const [rows] = await connection.execute(`
-            SELECT 
-                l.*,
-                CASE 
-                    WHEN e.id IS NOT NULL AND e.status IN ('ativo', 'aguardando_retirada') THEN false
-                    ELSE true 
-                END as available,
-                e.cpf as emprestadoPara,
-                e.data_prevista_devolucao as returnDate,
-                COUNT(r.id) as reviewCount,
-                AVG(r.rating) as avgRating
-            FROM livros l
-            LEFT JOIN emprestimos e ON l.id = e.bookId 
-                AND e.status IN ('ativo', 'aguardando_retirada')
-            LEFT JOIN resenhas r ON l.id = r.bookId
-            GROUP BY l.id, e.id, e.cpf, e.data_prevista_devolucao
-            ORDER BY l.title
-        `);
-        
-        console.log('Query executada, livros encontrados:', rows.length);
-        
-        // Processar os dados para o formato esperado pelo frontend
-        const processedBooks = rows.map(book => ({
-            ...book,
-            available: book.available === 1 || book.available === true || book.available === 'true',
-            reviewCount: parseInt(book.reviewCount) || 0,
-            avgRating: book.avgRating ? parseFloat(book.avgRating) : null
-        }));
-        
-        console.log('Livros indisponíveis:', processedBooks.filter(b => !b.available).length);
-        
-        res.json(processedBooks);
-    } catch (error) {
-        console.error('=== ERRO NA ROTA /api/books ===');
-        console.error('Mensagem:', error.message);
-        console.error('Stack:', error.stack);
-        res.status(500).json({ 
-            error: 'Erro interno do servidor',
-            details: error.message 
-        });
-    } finally {
-        if (connection) {
-            connection.release();
-        }
-    }
-});
 
 app.get('/api/books/:id', async (req, res) => {
     const { id } = req.params;
@@ -780,83 +835,153 @@ app.get('/api/user/loan-history/:bookId', isAuthenticated, async (req, res) => {
 // ================================
 
 app.post('/api/loan/request', isAuthenticated, async (req, res) => {
+    console.log('\n========================================');
+    console.log('🔥 NOVA SOLICITAÇÃO DE EMPRÉSTIMO');
+    console.log('========================================');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('User CPF:', req.session.user?.cpf);
+    console.log('Body recebido:', JSON.stringify(req.body));
+    
     const { bookId } = req.body;
     const userCpf = req.session.user.cpf;
     
-    console.log('=== SOLICITAÇÃO DE EMPRÉSTIMO ===');
-    console.log('BookId:', bookId, 'CPF:', userCpf);
-    
+    // Validação inicial
     if (!bookId) {
+        console.log('❌ ERRO: BookId não fornecido');
         return res.status(400).json({ error: 'ID do livro é obrigatório' });
     }
     
+    const bookIdInt = parseInt(bookId);
+    if (isNaN(bookIdInt)) {
+        console.log('❌ ERRO: BookId inválido:', bookId);
+        return res.status(400).json({ error: 'ID do livro inválido' });
+    }
+    
+    console.log('✅ Validações OK - BookId:', bookIdInt, 'CPF:', userCpf);
+    
     let connection;
     try {
+        console.log('📡 Obtendo conexão do pool...');
         connection = await pool.getConnection();
-        await connection.beginTransaction();
+        console.log('✅ Conexão obtida');
         
-        // Verificar limite de 3 empréstimos ativos/aguardando
+        console.log('🔄 Iniciando transação...');
+        await connection.beginTransaction();
+        console.log('✅ Transação iniciada');
+        
+        // 1️⃣ Verificar limite de empréstimos
+        console.log('📊 Verificando limite de empréstimos ativos...');
         const [activeLoans] = await connection.execute(
             'SELECT COUNT(*) as total FROM emprestimos WHERE cpf = ? AND status IN ("ativo", "aguardando_retirada")',
             [userCpf]
         );
+        console.log('Total de empréstimos ativos:', activeLoans[0].total);
         
         if (activeLoans[0].total >= 3) {
+            console.log('❌ LIMITE ATINGIDO: Usuário já tem 3 empréstimos');
             await connection.rollback();
             return res.status(400).json({ 
                 error: 'Você atingiu o limite de 3 empréstimos simultâneos.' 
             });
         }
+        console.log('✅ Limite OK');
         
-        // Verificar se o livro existe
+        // 2️⃣ Verificar se o livro existe
+        console.log('📚 Verificando se o livro existe...');
         const [bookRows] = await connection.execute(
-            'SELECT * FROM livros WHERE id = ?', 
-            [bookId]
+            'SELECT id, title FROM livros WHERE id = ?', 
+            [bookIdInt]
         );
         
         if (bookRows.length === 0) {
+            console.log('❌ ERRO: Livro não encontrado no DB');
             await connection.rollback();
             return res.status(404).json({ error: 'Livro não encontrado' });
         }
+        console.log('✅ Livro encontrado:', bookRows[0].title);
         
-        // Verificar se já existe empréstimo ativo ou aguardando
+        // 3️⃣ Verificar se já existe empréstimo ativo
+        console.log('🔍 Verificando empréstimos ativos do livro...');
         const [existingLoans] = await connection.execute(
-            'SELECT * FROM emprestimos WHERE bookId = ? AND status IN ("ativo", "aguardando_retirada")', 
-            [bookId]
+            'SELECT id, cpf, status FROM emprestimos WHERE bookId = ? AND status IN ("ativo", "aguardando_retirada")', 
+            [bookIdInt]
         );
         
         if (existingLoans.length > 0) {
+            console.log('❌ CONFLITO: Livro já tem empréstimo ativo');
+            console.log('Detalhes:', existingLoans[0]);
             await connection.rollback();
             return res.status(400).json({ 
                 error: 'Este livro já está emprestado ou aguardando aprovação' 
             });
         }
+        console.log('✅ Livro disponível para empréstimo');
         
-        // Criar empréstimo com status "aguardando_retirada"
+        // 4️⃣ Criar empréstimo
+        console.log('💾 Criando registro de empréstimo...');
         const dataRetirada = new Date();
         const dataPrevisaDevolucao = new Date();
         dataPrevisaDevolucao.setDate(dataRetirada.getDate() + 14);
         
-        await connection.execute(`
+        console.log('Data retirada:', dataRetirada.toISOString());
+        console.log('Data prevista devolução:', dataPrevisaDevolucao.toISOString());
+        
+        const [insertResult] = await connection.execute(`
             INSERT INTO emprestimos (bookId, cpf, data_retirada, data_prevista_devolucao, status) 
             VALUES (?, ?, ?, ?, 'aguardando_retirada')
-        `, [bookId, userCpf, dataRetirada, dataPrevisaDevolucao]);
+        `, [bookIdInt, userCpf, dataRetirada, dataPrevisaDevolucao]);
         
-        console.log('✅ Empréstimo criado com status: aguardando_retirada');
+        console.log('✅ Empréstimo criado - ID:', insertResult.insertId);
         
+        console.log('🔄 Commitando transação...');
         await connection.commit();
+        console.log('✅ TRANSAÇÃO COMMITADA COM SUCESSO');
+        
+        console.log('📤 Enviando resposta de sucesso...');
         res.status(200).json({ 
-            message: '📚 Empréstimo solicitado! Aguardando aprovação do bibliotecário.' 
+            message: '📚 Empréstimo solicitado! Aguardando aprovação do bibliotecário.',
+            loanId: insertResult.insertId
         });
+        console.log('✅ Resposta enviada com sucesso');
+        console.log('========================================\n');
         
     } catch (error) {
-        if (connection) await connection.rollback();
-        console.error('Erro ao solicitar empréstimo:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.error('\n❌ ========== ERRO CAPTURADO ==========');
+        console.error('Timestamp:', new Date().toISOString());
+        console.error('Tipo:', error.constructor.name);
+        console.error('Mensagem:', error.message);
+        console.error('Código:', error.code);
+        console.error('SQL State:', error.sqlState);
+        console.error('SQL Message:', error.sqlMessage);
+        console.error('Stack:', error.stack);
+        console.error('=====================================\n');
+        
+        if (connection) {
+            console.log('🔄 Fazendo rollback...');
+            try {
+                await connection.rollback();
+                console.log('✅ Rollback executado');
+            } catch (rollbackError) {
+                console.error('❌ Erro no rollback:', rollbackError.message);
+            }
+        }
+        
+        // Resposta de erro detalhada
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+            code: error.code
+        });
     } finally {
-        if (connection) connection.release();
+        if (connection) {
+            console.log('🔓 Liberando conexão...');
+            connection.release();
+            console.log('✅ Conexão liberada');
+        }
     }
 });
+
+console.log('✅ Rota /api/loan/request registrada com debug detalhado');
 
 
 app.post('/api/admin/confirm-pickup', isAuthenticated, isAdmin, async (req, res) => {
@@ -1042,7 +1167,6 @@ app.post('/api/loan/cancel-reserve', isAuthenticated, async (req, res) => {
 });
 
 // Cancelar reserva
-
 app.post('/api/loan/cancel-request', isAuthenticated, async (req, res) => {
     const { bookId } = req.body;
     const userCpf = req.session.user.cpf;
@@ -1055,46 +1179,63 @@ app.post('/api/loan/cancel-request', isAuthenticated, async (req, res) => {
         connection = await pool.getConnection();
         await connection.beginTransaction();
         
-        // Cancelar empréstimo aguardando retirada
-        const [result] = await connection.execute(
+        // 1️⃣ Tentar cancelar empréstimo aguardando retirada
+        const [emprestimo] = await connection.execute(
             'DELETE FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
             [bookId, userCpf]
         );
         
-        if (result.affectedRows > 0) {
+        if (emprestimo.affectedRows > 0) {
+            console.log('✅ Empréstimo aguardando retirada cancelado');
             await connection.commit();
-            res.json({ message: 'Solicitação cancelada com sucesso!' });
-        } else {
-            // Tentar cancelar reserva
-            await connection.rollback();
-            const cancelReserveResult = await fetch('http://localhost:3000/api/loan/cancel-reserve', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bookId })
-            });
-            
-            if (cancelReserveResult.ok) {
-                res.json({ message: 'Reserva cancelada com sucesso!' });
-            } else {
-                res.status(404).json({ error: 'Solicitação não encontrada' });
-            }
+            return res.json({ message: 'Solicitação cancelada com sucesso!' });
         }
+        
+        // 2️⃣ Se não achou empréstimo, tentar cancelar reserva
+        const [reserva] = await connection.execute(
+            'DELETE FROM reservas WHERE bookId = ? AND cpf = ? AND status = "aguardando"',
+            [bookId, userCpf]
+        );
+        
+        if (reserva.affectedRows > 0) {
+            console.log('✅ Reserva cancelada');
+            
+            // Reordenar fila
+            const [remainingQueue] = await connection.execute(
+                'SELECT id FROM reservas WHERE bookId = ? AND status = "aguardando" ORDER BY posicao ASC',
+                [bookId]
+            );
+            
+            for (let i = 0; i < remainingQueue.length; i++) {
+                await connection.execute(
+                    'UPDATE reservas SET posicao = ? WHERE id = ?',
+                    [i + 1, remainingQueue[i].id]
+                );
+            }
+            
+            await connection.commit();
+            return res.json({ message: 'Reserva cancelada com sucesso!' });
+        }
+        
+        // 3️⃣ Não encontrou nada
+        await connection.rollback();
+        console.log('❌ Nenhuma solicitação encontrada');
+        res.status(404).json({ error: 'Nenhuma solicitação ativa encontrada' });
         
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('Erro ao cancelar solicitação:', error);
+        console.error('❌ Erro ao cancelar:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
     }
-});
 
-app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
+
+});app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
     const { bookId, status } = req.body;
     const userCpf = req.session.user.cpf;
     
-    console.log('=== MARCAR COMO LIDO ===');
-    console.log('BookId:', bookId, 'Status:', status, 'CPF:', userCpf);
+    console.log('=== MARCAR COMO LIDO (Corrigido) ===');
     
     if (!['lido', 'nao_terminado'].includes(status)) {
         return res.status(400).json({ error: 'Status inválido' });
@@ -1105,9 +1246,9 @@ app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
         connection = await pool.getConnection();
         await connection.beginTransaction();
         
-        // Buscar empréstimo devolvido mais recente
+        
         const [emprestimo] = await connection.execute(
-            `SELECT * FROM emprestimos 
+            `SELECT id, status_leitura FROM emprestimos 
              WHERE bookId = ? AND cpf = ? AND status = 'devolvido' 
              ORDER BY data_real_devolucao DESC LIMIT 1`,
             [bookId, userCpf]
@@ -1122,34 +1263,11 @@ app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
         
         const emprestimoId = emprestimo[0].id;
         const statusAnterior = emprestimo[0].status_leitura;
-        
-        // Atualizar status de leitura
+
         await connection.execute(
             'UPDATE emprestimos SET status_leitura = ?, data_marcado_lido = ? WHERE id = ?',
             [status, status === 'lido' ? new Date() : null, emprestimoId]
         );
-        
-        // Se marcado como lido E não estava lido antes, incrementar contador
-        if (status === 'lido' && statusAnterior !== 'lido') {
-            await connection.execute(
-                'UPDATE usuarios SET livros_lidos = livros_lidos + 1 WHERE cpf = ?',
-                [userCpf]
-            );
-            
-            // Verificar conquistas
-            try {
-                await connection.execute('CALL VerificarConquistas(?)', [userCpf]);
-            } catch (error) {
-                console.log('Erro ao verificar conquistas:', error.message);
-            }
-        }
-        // Se estava lido e agora não está, decrementar
-        else if (status === 'nao_terminado' && statusAnterior === 'lido') {
-            await connection.execute(
-                'UPDATE usuarios SET livros_lidos = GREATEST(livros_lidos - 1, 0) WHERE cpf = ?',
-                [userCpf]
-            );
-        }
         
         await connection.commit();
         
@@ -1161,7 +1279,7 @@ app.post('/api/loan/mark-read', isAuthenticated, async (req, res) => {
         
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('Erro ao marcar status:', error);
+        console.error('❌ Erro ao marcar status:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
@@ -1511,30 +1629,68 @@ app.delete('/api/favorites/:bookId', isAuthenticated, async (req, res) => {
 app.get('/api/user/shelves', isAuthenticated, async (req, res) => {
     const userCpf = req.session.user.cpf;
     
+    console.log('=== GET PRATELEIRAS ===');
+    console.log('User CPF:', userCpf);
+    
     let connection;
     try {
         connection = await pool.getConnection();
         
+        // Verificar estrutura da tabela
+        const [columns] = await connection.execute(`
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'prateleiras'
+        `);
+        
+        console.log('📋 Colunas da tabela prateleiras:', columns.map(c => c.COLUMN_NAME));
+        
+        // Determinar qual coluna de CPF usar
+        let cpfColumn = 'cpf'; // padrão
+        if (columns.some(c => c.COLUMN_NAME === 'user_cpf')) {
+            cpfColumn = 'user_cpf';
+        } else if (columns.some(c => c.COLUMN_NAME === 'cpf_usuario')) {
+            cpfColumn = 'cpf_usuario';
+        }
+        
+        console.log('✅ Usando coluna de CPF:', cpfColumn);
+        
+        // Buscar prateleiras do usuário
         const [shelves] = await connection.execute(`
             SELECT p.*, GROUP_CONCAT(pl.bookId) as book_ids
             FROM prateleiras p
             LEFT JOIN prateleira_livros pl ON p.id = pl.prateleira_id
-            WHERE p.cpf = ?
+            WHERE p.${cpfColumn} = ?
             GROUP BY p.id
         `, [userCpf]);
         
-        // Formatar resposta
-        const formattedShelves = shelves.map(shelf => ({
-            id: shelf.id,
-            name: shelf.nome_prateleira,
-            nome_prateleira: shelf.nome_prateleira,
-            books: shelf.book_ids ? shelf.book_ids.split(',').map(id => parseInt(id)) : []
-        }));
+        console.log('📚 Prateleiras encontradas:', shelves.length);
         
+        // Formatar resposta
+        const formattedShelves = shelves.map(shelf => {
+            console.log('Prateleira:', {
+                id: shelf.id,
+                nome: shelf.nome_prateleira,
+                cpf: shelf[cpfColumn],
+                book_ids: shelf.book_ids
+            });
+            
+            return {
+                id: shelf.id,
+                name: shelf.nome_prateleira,
+                nome_prateleira: shelf.nome_prateleira,
+                user_cpf: shelf[cpfColumn],
+                cpf: shelf[cpfColumn],
+                books: shelf.book_ids ? shelf.book_ids.split(',').map(id => parseInt(id)) : []
+            };
+        });
+        
+        console.log('✅ Retornando', formattedShelves.length, 'prateleiras');
         res.json(formattedShelves);
         
     } catch (error) {
-        console.error('Erro ao buscar prateleiras:', error);
+        console.error('❌ Erro ao buscar prateleiras:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
@@ -1596,6 +1752,77 @@ app.delete('/api/user/shelves/:shelfId', isAuthenticated, async (req, res) => {
         
     } catch (error) {
         console.error('Erro ao excluir prateleira:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.get('/api/user/shelves', isAuthenticated, async (req, res) => {
+    const userCpf = req.session.user.cpf;
+    
+    console.log('=== GET PRATELEIRAS ===');
+    console.log('User CPF:', userCpf);
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        // Verificar estrutura da tabela
+        const [columns] = await connection.execute(`
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'prateleiras'
+        `);
+        
+        console.log('📋 Colunas da tabela prateleiras:', columns.map(c => c.COLUMN_NAME));
+        
+        // Determinar qual coluna de CPF usar
+        let cpfColumn = 'cpf'; // padrão
+        if (columns.some(c => c.COLUMN_NAME === 'user_cpf')) {
+            cpfColumn = 'user_cpf';
+        } else if (columns.some(c => c.COLUMN_NAME === 'cpf_usuario')) {
+            cpfColumn = 'cpf_usuario';
+        }
+        
+        console.log('✅ Usando coluna de CPF:', cpfColumn);
+        
+        // Buscar prateleiras do usuário
+        const [shelves] = await connection.execute(`
+            SELECT p.*, GROUP_CONCAT(pl.bookId) as book_ids
+            FROM prateleiras p
+            LEFT JOIN prateleira_livros pl ON p.id = pl.prateleira_id
+            WHERE p.${cpfColumn} = ?
+            GROUP BY p.id
+        `, [userCpf]);
+        
+        console.log('📚 Prateleiras encontradas:', shelves.length);
+        
+        // Formatar resposta
+        const formattedShelves = shelves.map(shelf => {
+            console.log('Prateleira:', {
+                id: shelf.id,
+                nome: shelf.nome_prateleira,
+                cpf: shelf[cpfColumn],
+                book_ids: shelf.book_ids
+            });
+            
+            return {
+                id: shelf.id,
+                name: shelf.nome_prateleira,
+                nome_prateleira: shelf.nome_prateleira,
+                user_cpf: shelf[cpfColumn],
+                cpf: shelf[cpfColumn],
+                books: shelf.book_ids ? shelf.book_ids.split(',').map(id => parseInt(id)) : []
+            };
+        });
+        
+        console.log('✅ Retornando', formattedShelves.length, 'prateleiras');
+        res.json(formattedShelves);
+        
+    } catch (error) {
+        console.error('❌ Erro ao buscar prateleiras:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         if (connection) connection.release();
@@ -1709,68 +1936,6 @@ app.get('/api/user/dashboard', isAuthenticated, async (req, res) => {
 // ================================
 // CONQUISTAS DO USUÁRIO
 // ================================
-
-// Verificar e conceder conquistas
-app.post('/api/user/check-achievements', isAuthenticated, async (req, res) => {
-    const userCpf = req.session.user.cpf;
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // Chamar a stored procedure
-        await connection.execute('CALL VerificarConquistas(?)', [userCpf]);
-        
-        res.json({ message: 'Conquistas verificadas!' });
-        
-    } catch (error) {
-        console.error('Erro ao verificar conquistas:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
-
-
-// ================================
-// CONQUISTAS DO USUÁRIO
-// ================================
-
-app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
-    const userCpf = req.session.user.cpf;
-    
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        
-        // Buscar conquistas do usuário
-        const [userData] = await connection.execute(
-            'SELECT conquistas_desbloqueadas FROM usuarios WHERE cpf = ?',
-            [userCpf]
-        );
-        
-        const conquistasDesbloqueadas = userData[0].conquistas_desbloqueadas || [];
-        
-        // Buscar todas as conquistas disponíveis
-        const [allAchievements] = await connection.execute(
-            'SELECT * FROM conquistas_disponiveis WHERE ativa = TRUE ORDER BY ordem_exibicao'
-        );
-        
-        // Marcar quais estão desbloqueadas
-        const achievements = allAchievements.map(achievement => ({
-            ...achievement,
-            desbloqueada: conquistasDesbloqueadas.includes(achievement.id)
-        }));
-        
-        res.json(achievements);
-        
-    } catch (error) {
-        console.error('Erro ao buscar conquistas:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        if (connection) connection.release();
-    }
-});
 app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
     const userCpf = req.session.user.cpf;
     
@@ -1781,58 +1946,116 @@ app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
     try {
         connection = await pool.getConnection();
         
-        // Buscar conquistas do usuário
+        // 1️⃣ Buscar dados do usuário
         const [userData] = await connection.execute(
-            'SELECT conquistas_desbloqueadas FROM usuarios WHERE cpf = ?',
+            'SELECT conquistas_desbloqueadas, livros_lidos FROM usuarios WHERE cpf = ?',
             [userCpf]
         );
         
-        console.log('Dados do usuário:', userData[0]);
-        
-        let conquistasDesbloqueadas = [];
-        
-        // Parse seguro do JSON
-        if (userData[0] && userData[0].conquistas_desbloqueadas) {
-            try {
-                // Se já for um array, usar diretamente
-                if (Array.isArray(userData[0].conquistas_desbloqueadas)) {
-                    conquistasDesbloqueadas = userData[0].conquistas_desbloqueadas;
-                } 
-                // Se for string JSON, parsear
-                else if (typeof userData[0].conquistas_desbloqueadas === 'string') {
-                    conquistasDesbloqueadas = JSON.parse(userData[0].conquistas_desbloqueadas);
-                }
-            } catch (e) {
-                console.log('Erro ao parsear conquistas, usando array vazio:', e.message);
-                conquistasDesbloqueadas = [];
-            }
+        if (userData.length === 0) {
+            return res.status(404).json({ error: 'Usuário não encontrado' });
         }
         
-        console.log('Conquistas desbloqueadas (IDs):', conquistasDesbloqueadas);
+        console.log('📊 Dados do usuário:', {
+            livros_lidos: userData[0].livros_lidos,
+            conquistas_raw: userData[0].conquistas_desbloqueadas
+        });
         
-        // Buscar todas as conquistas disponíveis
+        // 2️⃣ Parse seguro das conquistas desbloqueadas
+        let conquistasDesbloqueadas = [];
+        
+        try {
+            const rawData = userData[0].conquistas_desbloqueadas;
+            
+            if (!rawData || rawData === 'null' || rawData === '') {
+                conquistasDesbloqueadas = [];
+            } else if (Array.isArray(rawData)) {
+                conquistasDesbloqueadas = rawData;
+            } else if (Buffer.isBuffer(rawData)) {
+                const jsonStr = rawData.toString('utf8');
+                conquistasDesbloqueadas = JSON.parse(jsonStr);
+            } else if (typeof rawData === 'string') {
+                conquistasDesbloqueadas = JSON.parse(rawData);
+            } else if (typeof rawData === 'object') {
+                conquistasDesbloqueadas = rawData;
+            }
+            
+            // Garantir que é um array
+            if (!Array.isArray(conquistasDesbloqueadas)) {
+                conquistasDesbloqueadas = [];
+            }
+            
+        } catch (parseError) {
+            console.log('⚠️ Erro ao parsear conquistas, usando array vazio:', parseError.message);
+            conquistasDesbloqueadas = [];
+        }
+        
+        console.log('🎯 Conquistas desbloqueadas (IDs):', conquistasDesbloqueadas);
+        
+        // 3️⃣ Buscar todas as conquistas disponíveis
         const [allAchievements] = await connection.execute(
             'SELECT * FROM conquistas_disponiveis WHERE ativa = TRUE ORDER BY ordem_exibicao'
         );
         
-        console.log('Total de conquistas disponíveis:', allAchievements.length);
+        console.log('📚 Total de conquistas disponíveis:', allAchievements.length);
         
-        // Marcar quais estão desbloqueadas
+        // 4️⃣ Buscar estatísticas do usuário para calcular progresso
+        const [stats] = await connection.execute(`
+            SELECT 
+                u.livros_lidos,
+                (SELECT COUNT(*) FROM emprestimos WHERE cpf = u.cpf) as total_emprestimos,
+                (SELECT COUNT(*) FROM resenhas WHERE cpf = u.cpf) as total_resenhas,
+                DATEDIFF(CURDATE(), u.data_cadastro) as dias_cadastrado
+            FROM usuarios u
+            WHERE u.cpf = ?
+        `, [userCpf]);
+        
+        const userStats = stats[0];
+        console.log('📊 Estatísticas do usuário:', userStats);
+        
+        // 5️⃣ Montar array de conquistas com status
         const achievements = allAchievements.map(achievement => {
             const desbloqueada = conquistasDesbloqueadas.includes(achievement.id);
+            
+            // Calcular progresso atual
+            let progressoAtual = 0;
+            switch(achievement.condicao_tipo) {
+                case 'livros_lidos':
+                    progressoAtual = userStats.livros_lidos;
+                    break;
+                case 'emprestimos_realizados':
+                    progressoAtual = userStats.total_emprestimos;
+                    break;
+                case 'resenhas_escritas':
+                    progressoAtual = userStats.total_resenhas;
+                    break;
+                case 'dias_cadastrado':
+                    progressoAtual = userStats.dias_cadastrado;
+                    break;
+            }
+            
+            const progressoPorcentagem = Math.min(100, Math.round((progressoAtual / achievement.condicao_valor) * 100));
+            
             return {
                 id: achievement.id,
                 nome: achievement.nome,
                 descricao: achievement.descricao,
-                icone: achievement.icone,
+                icone: achievement.icone || '🏆',
                 condicao_tipo: achievement.condicao_tipo,
                 condicao_valor: achievement.condicao_valor,
-                desbloqueada: desbloqueada
+                desbloqueada: desbloqueada,
+                progresso_atual: progressoAtual,
+                progresso_porcentagem: progressoPorcentagem
             };
         });
         
-        console.log('Conquistas processadas:', achievements.length);
-        console.log('Desbloqueadas:', achievements.filter(a => a.desbloqueada).length);
+        const totalDesbloqueadas = achievements.filter(a => a.desbloqueada).length;
+        
+        console.log('✅ Conquistas processadas:', {
+            total: achievements.length,
+            desbloqueadas: totalDesbloqueadas,
+            bloqueadas: achievements.length - totalDesbloqueadas
+        });
         
         res.json(achievements);
         
@@ -1842,6 +2065,40 @@ app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
         console.error('Stack:', error.stack);
         res.status(500).json({ 
             error: 'Erro interno do servidor',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// ================================
+// ROTA DE DEBUG PARA FORÇAR VERIFICAÇÃO
+// ================================
+
+app.post('/api/user/check-achievements', isAuthenticated, async (req, res) => {
+    const userCpf = req.session.user.cpf;
+    
+    console.log('🔍 Verificando conquistas manualmente para:', userCpf);
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        // Chamar procedure de verificação
+        await connection.execute('CALL VerificarConquistas(?)', [userCpf]);
+        
+        console.log('✅ Verificação concluída');
+        
+        res.json({ 
+            message: 'Conquistas verificadas com sucesso!',
+            info: 'Se você desbloqueou novas conquistas, elas aparecerão no seu perfil.'
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao verificar conquistas:', error);
+        res.status(500).json({ 
+            error: 'Erro ao verificar conquistas',
             details: error.message 
         });
     } finally {
@@ -1849,30 +2106,54 @@ app.get('/api/user/achievements', isAuthenticated, async (req, res) => {
     }
 });
 
-// Verificar e conceder conquistas
-app.post('/api/user/check-achievements', isAuthenticated, async (req, res) => {
-    const userCpf = req.session.user.cpf;
-    
+
+
+// ================================
+// ROTAS ADMIN
+// ================================
+
+
+app.get('/api/admin/achievements-debug', isAuthenticated, isAdmin, async (req, res) => {
     let connection;
     try {
         connection = await pool.getConnection();
         
-        // Chamar a stored procedure
-        await connection.execute('CALL VerificarConquistas(?)', [userCpf]);
+        // Buscar estatísticas gerais
+        const [conquistas] = await connection.execute(
+            'SELECT * FROM conquistas_disponiveis ORDER BY ordem_exibicao'
+        );
         
-        res.json({ message: 'Conquistas verificadas!' });
+        const [usuarios] = await connection.execute(`
+            SELECT 
+                u.nome,
+                u.cpf,
+                u.livros_lidos,
+                u.conquistas_desbloqueadas,
+                JSON_LENGTH(COALESCE(u.conquistas_desbloqueadas, JSON_ARRAY())) as total_desbloqueadas,
+                (SELECT COUNT(*) FROM emprestimos WHERE cpf = u.cpf) as total_emprestimos,
+                (SELECT COUNT(*) FROM resenhas WHERE cpf = u.cpf) as total_resenhas
+            FROM usuarios u
+            WHERE u.tipo = 'leitor'
+            ORDER BY total_desbloqueadas DESC
+            LIMIT 10
+        `);
+        
+        res.json({
+            total_conquistas_disponiveis: conquistas.length,
+            conquistas_ativas: conquistas.filter(c => c.ativa).length,
+            top_usuarios: usuarios,
+            todas_conquistas: conquistas
+        });
         
     } catch (error) {
-        console.error('Erro ao verificar conquistas:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.error('Erro no debug:', error);
+        res.status(500).json({ error: error.message });
     } finally {
         if (connection) connection.release();
     }
 });
 
-// ================================
-// ROTAS ADMIN
-// ================================
+console.log('✅ Rotas de conquistas corrigidas e registradas');
 
 app.get('/api/admin/dashboard', isAuthenticated, isAdmin, async (req, res) => {
     let connection;
@@ -1997,6 +2278,13 @@ app.get('/api/admin/debug-emprestimos', isAuthenticated, isAdmin, async (req, re
 app.post('/api/admin/approve-return', isAuthenticated, isAdmin, async (req, res) => {
     const { bookId, cpf } = req.body;
     
+    console.log('=== APROVANDO DEVOLUÇÃO ===');
+    console.log('BookId:', bookId, 'CPF:', cpf);
+    
+    if (!bookId || !cpf) {
+        return res.status(400).json({ error: 'BookId e CPF são obrigatórios' });
+    }
+    
     let connection;
     try {
         connection = await pool.getConnection();
@@ -2011,8 +2299,12 @@ app.post('/api/admin/approve-return', isAuthenticated, isAdmin, async (req, res)
         
         if (result.affectedRows === 0) {
             await connection.rollback();
-            return res.status(404).json({ error: 'Empréstimo não encontrado' });
+            return res.status(404).json({ 
+                error: 'Empréstimo pendente de devolução não encontrado' 
+            });
         }
+        
+        console.log('✅ Devolução aprovada');
         
         // Verificar se há alguém na fila para este livro
         const [nextInQueue] = await connection.execute(`
@@ -2024,6 +2316,8 @@ app.post('/api/admin/approve-return', isAuthenticated, isAdmin, async (req, res)
         
         if (nextInQueue.length > 0) {
             const nextUserCpf = nextInQueue[0].cpf;
+            
+            console.log('📋 Próximo na fila:', nextUserCpf);
             
             // Atualizar status da reserva
             await connection.execute(`
@@ -2038,15 +2332,85 @@ app.post('/api/admin/approve-return', isAuthenticated, isAdmin, async (req, res)
                 VALUES (?, 'reserva', 'Livro Disponível!', 
                         'O livro que você reservou está disponível para retirada.')
             `, [nextUserCpf]);
+            
+            console.log('✅ Próximo usuário notificado');
         }
         
         await connection.commit();
-        res.status(200).json({ message: 'Devolução aprovada com sucesso!' });
+        res.status(200).json({ 
+            message: 'Devolução aprovada com sucesso!' 
+        });
         
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('Erro ao aprovar devolução:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.error('❌ Erro ao aprovar devolução:', error);
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: error.message 
+        });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// ================================
+// ROTA: CONFIRMAR RETIRADA (VERIFICAR SE EXISTE)
+// ================================
+
+app.post('/api/admin/confirm-pickup', isAuthenticated, isAdmin, async (req, res) => {
+    const { bookId, cpf } = req.body;
+    
+    console.log('=== CONFIRMANDO RETIRADA ===');
+    console.log('BookId:', bookId, 'CPF:', cpf);
+    
+    if (!bookId || !cpf) {
+        return res.status(400).json({ error: 'BookId e CPF são obrigatórios' });
+    }
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+        
+        // Buscar empréstimo aguardando retirada
+        const [emprestimo] = await connection.execute(
+            'SELECT * FROM emprestimos WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
+            [bookId, cpf]
+        );
+        
+        if (emprestimo.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ 
+                error: 'Empréstimo aguardando retirada não encontrado' 
+            });
+        }
+        
+        // Atualizar status para "ativo"
+        await connection.execute(
+            'UPDATE emprestimos SET status = "ativo" WHERE bookId = ? AND cpf = ? AND status = "aguardando_retirada"',
+            [bookId, cpf]
+        );
+        
+        // Criar notificação para o usuário
+        await connection.execute(
+            `INSERT INTO notificacoes (cpf, tipo, titulo, mensagem) 
+             VALUES (?, 'emprestimo', 'Retirada Confirmada ✓', 
+                     'Sua retirada foi confirmada. Aproveite a leitura! Devolva até o prazo.')`,
+            [cpf]
+        );
+        
+        console.log('✅ Retirada confirmada - Status atualizado para ativo');
+        
+        await connection.commit();
+        res.json({ message: 'Retirada confirmada com sucesso!' });
+        
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('❌ Erro ao confirmar retirada:', error);
+        res.status(500).json({ 
+            error: 'Erro interno do servidor',
+            details: error.message 
+        });
     } finally {
         if (connection) connection.release();
     }

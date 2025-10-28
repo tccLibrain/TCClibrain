@@ -3,7 +3,6 @@ import logo_librain_T from '../images/logo_librain_T.png';
 import IMask from 'imask';
 import { navigateTo } from '../main.js';
 
-// Lista completa de estados brasileiros
 const ESTADOS_BRASILEIROS = [
     { sigla: 'AC', nome: 'Acre' },
     { sigla: 'AL', nome: 'Alagoas' },
@@ -34,10 +33,8 @@ const ESTADOS_BRASILEIROS = [
     { sigla: 'TO', nome: 'Tocantins' }
 ];
 
-// Validação oficial do CPF
 function validarCPF(cpf) {
     if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
-
     let soma = 0;
     for (let i = 0; i < 9; i++) {
         soma += parseInt(cpf.charAt(i)) * (10 - i);
@@ -45,7 +42,6 @@ function validarCPF(cpf) {
     let resto = (soma * 10) % 11;
     if (resto === 10 || resto === 11) resto = 0;
     if (resto !== parseInt(cpf.charAt(9))) return false;
-
     soma = 0;
     for (let i = 0; i < 10; i++) {
         soma += parseInt(cpf.charAt(i)) * (11 - i);
@@ -55,17 +51,14 @@ function validarCPF(cpf) {
     return resto === parseInt(cpf.charAt(10));
 }
 
-// Validação de senha forte
 function validarSenha(senha) {
     return senha.length >= 8;
 }
 
-// Validação de email
 function validarEmail(email) {
     return /^\S+@\S+\.\S+$/.test(email);
 }
 
-// Função para injetar o CSS no <head> uma única vez
 function injectCSS() {
     if (document.getElementById('user-registration-styles')) {
         return;
@@ -74,7 +67,15 @@ function injectCSS() {
     const style = document.createElement('style');
     style.id = 'user-registration-styles';
     style.innerHTML = `
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: #434E70;
+        }
+
         .containerCadastro {
+            background-image: url('${folhaLogin}');
             background-repeat: no-repeat;
             display: flex;
             width: 100%;
@@ -99,31 +100,30 @@ function injectCSS() {
         
         .error-message {
             color: #ff6b6b;
-            font-size: 0.85rem;
+            font-size: 13px;
             margin-top: -8px;
             margin-bottom: 8px;
             text-align: center;
-            font-weight: normal;
+            font-weight: 500;
         }
         
         .success-message {
             color: #51cf66;
-            font-size: 0.85rem;
+            font-size: 13px;
             margin-top: -8px;
             margin-bottom: 8px;
             text-align: center;
-            font-weight: normal;
+            font-weight: 500;
         }
         
         .registration-form {
-            margin-top: 0px;
+            margin-top: 0;
             display: flex;
             flex-direction: column;
             gap: 10px;
             width: 100%;
-            max-width: 320px;
+            max-width: 300px;
             margin: auto;
-            padding: 0 20px;
         }
         
         .registration-form input[type="text"],
@@ -133,38 +133,33 @@ function injectCSS() {
         .registration-form select {
             background-color: #CFD2DB;
             color: #434E70;
-            border: 2px solid transparent;
+            border: none;
             border-radius: 999px;
-            padding: 10px 18px;
+            padding: 12px 20px;
             font-family: arial black;
-            font-size: 14px;
+            font-size: 16px;
             text-align: center;
             outline: none;
             margin-bottom: 10px;
             width: 100%;
-            max-width: 280px;
-            margin-left: auto;
-            margin-right: auto;
             box-sizing: border-box;
             transition: all 0.3s ease;
         }
         
         .registration-form input:focus,
         .registration-form select:focus {
-            border-color: #9bb4ff;
-            background-color: #e8ebf0;
-            transform: scale(1.02);
+            background-color: #e2e8f0;
         }
         
         .registration-form input.error,
         .registration-form select.error {
-            border-color: #ff6b6b;
+            border: 2px solid #ff6b6b;
             animation: shake 0.3s;
         }
         
         .registration-form input.valid,
         .registration-form select.valid {
-            border-color: #51cf66;
+            border: 2px solid #51cf66;
         }
         
         @keyframes shake {
@@ -183,8 +178,13 @@ function injectCSS() {
             background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23434E70' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
             background-repeat: no-repeat;
             background-position: right 15px center;
-            background-size: 20px;
-            padding-right: 45px;
+            background-size: 18px;
+            cursor: pointer;
+        }
+
+        .registration-form select option {
+            background: white;
+            color: #434E70;
         }
         
         .registration-form button {
@@ -194,24 +194,19 @@ function injectCSS() {
             border-radius: 999px;
             padding: 12px 20px;
             font-family: arial black;
-            font-size: 14px;
+            font-size: 16px;
             text-align: center;
             outline: none;
             margin-bottom: 10px;
             width: 100%;
-            max-width: 280px;
-            margin-left: auto;
-            margin-right: auto;
             box-sizing: border-box;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         
         .registration-form button:hover {
-            background-color: #8aa3f0;
+            background-color: #7a9dff;
             transform: translateY(-2px);
-            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
         }
         
         .registration-form button:active {
@@ -237,8 +232,7 @@ function injectCSS() {
             display: flex;
             text-align: center;
             justify-content: center;
-            margin-top: 30px;
-            margin-bottom: 30px;
+            margin-top: 50px;
             color: #fff;
             font-family: arial black;
             font-size: 80%;
@@ -282,14 +276,11 @@ function injectCSS() {
         
         .password-strength {
             height: 4px;
-            background-color: #ddd;
+            background-color: rgba(255, 255, 255, 0.3);
             border-radius: 2px;
             margin-top: -5px;
             margin-bottom: 10px;
             overflow: hidden;
-            max-width: 280px;
-            margin-left: auto;
-            margin-right: auto;
         }
         
         .password-strength-bar {
@@ -314,35 +305,12 @@ function injectCSS() {
         }
         
         .form-hint {
-            font-size: 0.75rem;
-            color: #ccc;
+            font-size: 12px;
+            color: #fff;
             text-align: center;
             margin-top: -8px;
             margin-bottom: 8px;
-        }
-        
-        @media (max-width: 480px) {
-            .registration-form {
-                max-width: 100%;
-                padding: 0 15px;
-            }
-            
-            .registration-form input[type="text"],
-            .registration-form input[type="password"],
-            .registration-form input[type="date"],
-            .registration-form input[type="email"],
-            .registration-form select,
-            .registration-form button {
-                max-width: 100%;
-            }
-            
-            .password-strength {
-                max-width: 100%;
-            }
-            
-            .cadastro {
-                font-size: 180%;
-            }
+            opacity: 0.8;
         }
     `;
     document.head.appendChild(style);
@@ -352,7 +320,7 @@ export function renderUserRegistration(container) {
     injectCSS();
 
     container.innerHTML = `
-        <div class='containerCadastro centro' style="background-image: url('${folhaLogin}');">
+        <div class='containerCadastro centro'>
             <img src="${logo_librain_T}" alt="Logo" height='200px' width='200px'>
         </div>
 
@@ -398,12 +366,10 @@ export function renderUserRegistration(container) {
         });
     }
 
-    // Máscara de CPF
     IMask(document.getElementById('cpf'), {
         mask: '000.000.000-00',
     });
 
-    // Indicador de força da senha
     const senhaInput = document.getElementById('senha');
     const strengthBar = document.getElementById('password-strength-bar');
     
@@ -424,7 +390,6 @@ export function renderUserRegistration(container) {
 
     const formStep1 = document.getElementById('registration-step1');
 
-    // Validação em tempo real
     const setupRealTimeValidation = (inputId, validationFn, errorMsg) => {
         const input = document.getElementById(inputId);
         const errorDiv = document.getElementById('error-' + inputId);
@@ -456,7 +421,6 @@ export function renderUserRegistration(container) {
 
     formStep1.onsubmit = async (e) => {
         e.preventDefault();
-        console.log('Formulário step 1 enviado');
 
         ['nome', 'cpf', 'senha', 'data_nascimento'].forEach(field => {
             const errorDiv = document.getElementById('error-' + field);
@@ -480,8 +444,6 @@ export function renderUserRegistration(container) {
         cpf = cpf.replace(/[^\d]/g, '');
         const senha = senhaInput.value.trim();
         const data_nascimento = dataNascInput.value.trim();
-
-        console.log('Dados coletados:', { nome, cpf: cpf.length, senha: senha.length, data_nascimento });
 
         let hasError = false;
 
@@ -508,7 +470,6 @@ export function renderUserRegistration(container) {
             document.getElementById('error-data_nascimento').textContent = 'Data de nascimento é obrigatória.';
             hasError = true;
         } else {
-            // Validar idade mínima (13 anos)
             const dataNasc = new Date(data_nascimento);
             const hoje = new Date();
             let idade = hoje.getFullYear() - dataNasc.getFullYear();
@@ -525,14 +486,8 @@ export function renderUserRegistration(container) {
             }
         }
 
-        if (hasError) {
-            console.log('Erros de validação encontrados');
-            return;
-        }
+        if (hasError) return;
         
-        console.log('Validação passou, verificando CPF...');
-        
-        // Verificar se CPF já existe
         try {
             const checkCpfResponse = await fetch(`http://localhost:3000/api/check-cpf/${cpf}`, {
                 credentials: 'include'
@@ -544,22 +499,19 @@ export function renderUserRegistration(container) {
                 document.getElementById('error-cpf').textContent = 'CPF já cadastrado.';
                 return;
             }
-            
-            console.log('CPF disponível, indo para step 2');
         } catch (error) {
             console.error('Erro ao verificar CPF:', error);
             alert('Erro ao verificar CPF. Tente novamente.');
             return;
         }
 
-        // Se chegou aqui, está tudo OK - ir para step 2
         renderUserRegistrationStep2(container, { nome, cpf, senha, data_nascimento });
     };
 }
 
 function renderUserRegistrationStep2(container, step1Data) {
     container.innerHTML = `
-        <div class='containerCadastro centro' style="background-image: url('${folhaLogin}');">
+        <div class='containerCadastro centro'>
             <img src="${logo_librain_T}" alt="Logo" height='200px' width='200px'>
         </div>
 
@@ -607,7 +559,6 @@ function renderUserRegistrationStep2(container, step1Data) {
         renderUserRegistration(container);
     };
 
-    // Validação em tempo real para email
     const emailInput = document.getElementById('email');
     const errorEmail = document.getElementById('error-email');
     
@@ -626,7 +577,6 @@ function renderUserRegistrationStep2(container, step1Data) {
     formStep2.onsubmit = async (e) => {
         e.preventDefault();
 
-        // Limpar erros anteriores
         ['email', 'genero', 'cidade', 'estado'].forEach(field => {
             document.getElementById('error-' + field).textContent = '';
             document.getElementById(field).classList.remove('error');
@@ -639,7 +589,6 @@ function renderUserRegistrationStep2(container, step1Data) {
 
         let hasError = false;
 
-        // Validações
         if (!validarEmail(email)) {
             document.getElementById('email').classList.add('error');
             document.getElementById('error-email').textContent = 'E-mail inválido.';
@@ -666,7 +615,6 @@ function renderUserRegistrationStep2(container, step1Data) {
 
         if (hasError) return;
 
-        // Dados finais para envio
         const finalData = {
             ...step1Data,
             tipo: 'leitor',
@@ -682,8 +630,6 @@ function renderUserRegistrationStep2(container, step1Data) {
             complemento: null,
             cep: null
         };
-
-        console.log('Dados do cadastro:', finalData);
 
         const btnFinalizar = document.getElementById('btn-finalizar');
         btnFinalizar.disabled = true;
@@ -716,8 +662,8 @@ function renderUserRegistrationStep2(container, step1Data) {
             navigateTo('login');
         
         } catch (networkError) {
-            console.error('Erro de rede ou de conexão:', networkError);
-            alert('Erro de rede ou de conexão. Por favor, tente novamente.');
+            console.error('Erro de rede:', networkError);
+            alert('Erro de rede. Por favor, tente novamente.');
         } finally {
             btnFinalizar.disabled = false;
             btnFinalizar.textContent = 'Finalizar Cadastro';

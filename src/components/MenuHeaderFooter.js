@@ -41,7 +41,6 @@ export async function createShell(appContainer) {
             <a href="#" data-target="profile">👤 Meu Perfil</a>
             <a href="#" id="logout">🚪 Sair</a>
         `;
-        // Admins não precisam do footer de navegação
         footerHtml = ''; 
     } else {
         // Menu para o Usuário Comum
@@ -73,150 +72,167 @@ export async function createShell(appContainer) {
 
     appContainer.innerHTML = `
         <style>
-    /* HEADER CORRIGIDO - VERSÃO FORÇADA */
-    .shell-header {
-        display: flex !important;
-        justify-content: space-between !important;
-        align-items: center !important;
-        padding: 0 16px !important;
-        height: 100px !important;
-        max-height: 100px !important;
-        background: var(--branco) !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
-        position: fixed !important;
-        top: 0 !important;
-        width: 100% !important;
-        z-index: 1003 !important;
-        margin-bottom: 0 !important;
-    }
+            .shell-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 0 16px;
+                height: 100px;
+                background: var(--branco);
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+                position: fixed;
+                top: 0;
+                width: 100%;
+                z-index: 1003;
+            }
 
-    .header-left,
-    .header-center,
-    .header-right {
-        display: flex !important;
-        align-items: center !important;
-        flex: 1 1 0 !important;
-    }
+            .header-left,
+            .header-center,
+            .header-right {
+                display: flex;
+                align-items: center;
+                flex: 1;
+            }
 
-    .header-left {
-    justify-content: flex-start !important;
-}
+            .header-left {
+                justify-content: flex-start;
+            }
 
-    .header-center {
-        justify-content: center !important;
-    }
+            .header-center {
+                justify-content: center;
+            }
 
-    .header-right {
-    justify-content: flex-end !important;
-    padding-right: 30px !important; /* Empurra o menu para dentro */
-}
+            .header-right {
+                justify-content: flex-end;
+                padding-right: 25px;
+            }
 
-    /* Avatar do usuário à esquerda */
-    .shell-header .avatar {
-        width: 60px !important;
-        height: 60px !important;
-        max-height: 100px !important;
-        border-radius: 50% !important;
-        object-fit: cover !important;
-    }
+            .shell-header .avatar {
+                width: 60px;
+                height: 60px;
+                border-radius: 50%;
+                object-fit: cover;
+                cursor: pointer;
+                transition: transform 0.2s ease;
+            }
 
-    /* Logo centralizado */
-    .shell-header .logo {
-        height: 80px !important;
-        max-height: 100px !important;
-        object-fit: contain !important;
-    }
+            .shell-header .avatar:hover {
+                transform: scale(1.1);
+            }
 
-    /* Botão de menu à direita */
-    .menu-btn {
-        font-size: 24px !important;
-        background: var(--azul-escuro) !important;
-        color: #fff !important;
-        border: none !important;
-        border-radius: 6px !important;
-        padding: 6px 12px !important;
-        cursor: pointer !important;
-    }
+            .shell-header .logo {
+                height: 80px;
+                object-fit: contain;
+            }
 
-    .menu-header {
-        text-align: center;
-        padding: 20px 0;
-        border-bottom: 1px solid #444;
-        margin-bottom: 10px;
-    }
-    
-    #menu-wrapper nav a {
-        display: block;
-        padding: 15px 20px;
-        color: #fff;
-        font-size: 16px;
-        text-decoration: none;
-        border-left: 3px solid transparent;
-        transition: all 0.3s ease;
-    }
-    
-    #menu-wrapper nav a:hover {
-        background-color: #333;
-        border-left-color: #9bb4ff;
-        padding-left: 25px;
-    }
-    
-    .footer-btn {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 8px 4px;
-        min-height: 50px;
-        justify-content: center;
-    }
-    
-    .footer-btn span {
-        font-size: 10px;
-        margin-top: 2px;
-        line-height: 1;
-    }
-    
-    .avatar {
-        cursor: pointer;
-        transition: transform 0.2s ease;
-    }
-    
-    .avatar:hover {
-        transform: scale(1.1);
-    }
-    
-    .menu-btn {
-        transition: all 0.3s ease;
-    }
-    
-    .menu-btn:hover {
-        transform: scale(1.1);
-        background-color: var(--azul-original);
-    }
-    
-    @media (max-width: 768px) {
-        .header-left, .header-right {
-            margin: 0 8px !important;
-        }
-        
-        .shell-header .avatar {
-            width: 45px !important;
-            height: 45px !important;
-        }
-        
-        .footer-btn span {
-            font-size: 9px;
-        }
-    }
+            .menu-btn {
+                font-size: 24px;
+                background: var(--azul-escuro);
+                color: white !important;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 12px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+
+            .menu-btn:hover {
+                transform: scale(1.1);
+                background: var(--azul-original);
+            }
+
+            .menu-header {
+                text-align: center;
+                padding: 20px 0;
+                border-bottom: 1px solid #e2e8f0;
+                margin-bottom: 10px;
+            }
+
+            .menu-header img {
+                width: 60px;
+                height: 60px;
+                border-radius: 50%;
+                margin-bottom: 10px;
+            }
+
+            .menu-header h3 {
+                color: var(--azul-escuro);
+                margin: 0 0 5px 0;
+                font-size: 16px;
+            }
+
+            .menu-header p {
+                color: var(--azul-claro);
+                margin: 0;
+                font-size: 12px;
+            }
+
+            .menu-header hr {
+                border: 1px solid #e2e8f0;
+                margin: 15px 0;
+            }
+
+            #menu-wrapper nav a {
+                display: block;
+                padding: 15px 20px;
+                color: var(--azul-escuro);
+                font-size: 16px;
+                text-decoration: none;
+                border-left: 3px solid transparent;
+                transition: all 0.3s ease;
+            }
+
+            #menu-wrapper nav a:hover {
+                background-color: #f8f9fa;
+                border-left-color: var(--azul-original);
+                padding-left: 25px;
+            }
+
+            .footer-btn {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 8px 4px;
+                min-height: 50px;
+                justify-content: center;
+            }
+
+            .footer-btn span {
+                font-size: 10px;
+                margin-top: 2px;
+                line-height: 1;
+            }
+
+            @media (max-width: 768px) {
+                .shell-header .avatar {
+                    width: 45px;
+                    height: 45px;
+                }
+
+                .shell-header .logo {
+                    height: 60px;
+                }
+
+                .footer-btn span {
+                    font-size: 9px;
+                }
+            }
         </style>
 
         <header class="shell-header">
             <div class="header-left">
-                <img src="${avatarUrl}" alt="Avatar de ${user?.nome || 'Usuário'}" class="avatar" id="avatar-img" title="${user?.nome || 'Usuário'}"/>
+                <img src="${avatarUrl}" 
+                     alt="Avatar de ${user?.nome || 'Usuário'}" 
+                     class="avatar" 
+                     id="avatar-img" 
+                     title="${user?.nome || 'Usuário'}"/>
             </div>
 
             <div class="header-center">
-                <img src="${texto_e_livro}" alt="Logo Librain" class="logo" title="Sistema Librain"/>
+                <img src="${texto_e_livro}" 
+                     alt="Logo Librain" 
+                     class="logo" 
+                     title="Sistema Librain"/>
             </div>
 
             <div class="header-right">
@@ -224,12 +240,12 @@ export async function createShell(appContainer) {
             </div>
         </header>
 
-        <div id="menu-wrapper">
+        <div id="menu-wrapper" style="background: white;">
             <div class="menu-header">
-                <img src="${avatarUrl}" alt="Avatar" style="width: 60px; height: 60px; border-radius: 50%; margin-bottom: 10px;"/>
-                <h3 style="color: white; margin: 0 0 5px 0; font-size: 16px;">${user?.nome || 'Usuário'}</h3>
-                <p style="color: #ccc; margin: 0; font-size: 12px;">${isAdmin ? 'Administrador' : 'Leitor'}</p>
-                <hr style="border: 1px solid #444; margin: 15px 0;"/>
+                <img src="${avatarUrl}" alt="Avatar"/>
+                <h3>${user?.nome || 'Usuário'}</h3>
+                <p>${isAdmin ? 'Administrador' : 'Leitor'}</p>
+                <hr/>
             </div>
             <nav>${navLinksHtml}</nav>
         </div>
@@ -239,56 +255,6 @@ export async function createShell(appContainer) {
         <div class="content"></div>
 
         ${footerHtml}
-        
-        ´<style> 
-            .footer-btn {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                padding: 8px 4px;
-                min-height: 50px;
-                justify-content: center;
-            }
-            
-            .footer-btn span {
-                font-size: 10px;
-                margin-top: 2px;
-                line-height: 1;
-            }
-            
-            .avatar {
-                cursor: pointer;
-                transition: transform 0.2s ease;
-            }
-            
-            .avatar:hover {
-                transform: scale(1.1);
-            }
-            
-            .menu-btn {
-                transition: all 0.3s ease;
-            }
-            
-            .menu-btn:hover {
-                transform: scale(1.1);
-                background-color: var(--azul-original);
-            }
-            
-            @media (max-width: 768px) {
-                .header-left, .header-right {
-                    margin: 0 8px;
-                }
-                
-                .shell-header .avatar {
-                    width: 45px;
-                    height: 45px;
-                }
-                
-                .footer-btn span {
-                    font-size: 9px;
-                }
-            }
-        </style>
     `;
 
     console.log('Shell HTML criado');
@@ -315,8 +281,6 @@ function setupShellEventListeners(user, isAdmin) {
         
         menuWrapper.classList.toggle('show');
         overlay.classList.toggle('show');
-        
-        // Animação do botão hamburger
         hamburger.textContent = isOpen ? '☰' : '✕';
     });
 
@@ -392,19 +356,16 @@ function setupShellEventListeners(user, isAdmin) {
     console.log('Event listeners do shell configurados');
 }
 
-// Função utilitária para atualizar avatar no shell
+// Função para atualizar avatar no shell
 export function updateShellAvatar(newAvatarUrl) {
-    console.log('🔄 Atualizando avatar no shell:', newAvatarUrl.substring(0, 50) + '...');
+    console.log('🔄 Atualizando avatar no shell');
     
-    // Atualizar TODOS os avatares na página
     const avatarElements = document.querySelectorAll('.avatar, .menu-header img');
     
     avatarElements.forEach(img => {
         if (img) {
-            console.log('✅ Avatar atualizado:', img.className || img.alt);
             img.src = newAvatarUrl;
             
-            // Forçar recarregamento
             img.onerror = () => {
                 console.warn('⚠️ Erro ao carregar avatar, usando fallback');
                 img.src = 'https://i.pravatar.cc/150?img=12';
@@ -412,10 +373,10 @@ export function updateShellAvatar(newAvatarUrl) {
         }
     });
     
-    console.log(`✅ ${avatarElements.length} elementos de avatar atualizados`);
+    console.log(`✅ ${avatarElements.length} avatares atualizados`);
 }
 
-// Função utilitária para atualizar nome do usuário no shell
+// Função para atualizar nome do usuário no shell
 export function updateShellUserName(newName) {
     const nameElement = document.querySelector('.menu-header h3');
     if (nameElement) {
@@ -429,4 +390,6 @@ export function updateShellUserName(newName) {
             img.title = newName;
         }
     });
+    
+    console.log('✅ Nome do usuário atualizado para:', newName);
 }

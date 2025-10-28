@@ -109,28 +109,6 @@ h2 {
   border-radius: 20px;
 }
 
-.search-bar input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  padding: 0.5rem;
-  font-size: 16px;
-}
-
-.search-bar input:focus {
-  outline: 2px solid var(--azul-original);
-  outline-offset: 2px;
-}
-
-.search-bar button {
-  background: none;
-  border: none;
-  font-size: 20px;
-  color: var(--azul-original);
-  cursor: pointer;
-  padding-left: 0.5rem;
-}
-
 /* Livros */
 
 .categoria {

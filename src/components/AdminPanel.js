@@ -65,18 +65,17 @@ export async function renderAdminPanel(container) {
 function renderAdminContent(container, currentUser, dashboardData, allBooks) {
     const { stats, emprestimos_ativos, devolucoes_pendentes } = dashboardData;
     
-    // Separar empréstimos aguardando retirada dos ativos
     const aguardandoRetirada = emprestimos_ativos.filter(emp => emp.status === 'aguardando_retirada');
     const emprestimosAtivos = emprestimos_ativos.filter(emp => emp.status === 'ativo');
     
-    console.log('=== DEBUG ADMIN ===');
-    console.log('Total empréstimos:', emprestimos_ativos.length);
-    console.log('Aguardando retirada:', aguardandoRetirada.length);
-    console.log('Ativos:', emprestimosAtivos.length);
-    console.log('Empréstimos aguardando:', aguardandoRetirada);
-    
     container.innerHTML = `
-        <style>
+       <style>
+            html, body {
+                margin: 0;
+                padding: 0;
+                background-color: #434E70;
+            }
+
             .admin-container {
                 padding: 20px;
                 max-width: 1200px;
@@ -86,10 +85,24 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             .admin-header {
                 text-align: center;
                 margin-bottom: 30px;
-                background: var(--branco);
-                padding: 20px;
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                background: #CFD2DB;
+                padding: 25px 20px;
+                border-radius: 25px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            }
+
+            .admin-header h1 {
+                color: #434E70;
+                font-family: arial black;
+                margin: 0 0 10px 0;
+                font-size: 28px;
+            }
+
+            .admin-header p {
+                color: #434E70;
+                font-family: arial black;
+                margin: 0;
+                font-size: 14px;
             }
             
             .admin-stats {
@@ -100,61 +113,73 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             }
             
             .stat-card {
-                background: var(--branco);
-                padding: 20px;
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                background: #CFD2DB;
+                padding: 25px 20px;
+                border-radius: 20px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
                 text-align: center;
                 transition: transform 0.3s ease;
             }
             
             .stat-card:hover {
                 transform: translateY(-2px);
+                box-shadow: 0 6px 16px rgba(0,0,0,0.2);
             }
             
             .stat-number {
-                font-size: 32px;
+                font-size: 36px;
                 font-weight: bold;
-                color: var(--azul-escuro);
+                color: #434E70;
                 display: block;
-                margin-bottom: 8px;
+                margin-bottom: 10px;
+                font-family: arial black;
             }
             
             .stat-label {
-                color: var(--azul-claro);
+                color: #434E70;
                 font-size: 14px;
+                font-family: arial black;
             }
             
             .admin-section {
-                background: var(--branco);
-                padding: 20px;
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                background: #CFD2DB;
+                padding: 25px;
+                border-radius: 25px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
                 margin-bottom: 20px;
             }
             
             .section-tabs {
                 display: flex;
                 gap: 10px;
-                margin-bottom: 20px;
-                border-bottom: 2px solid var(--cinza-claro);
+                margin-bottom: 25px;
+                border-bottom: 2px solid #434E70;
                 flex-wrap: wrap;
+                padding-bottom: 5px;
             }
             
             .tab-btn {
-                padding: 10px 20px;
+                padding: 12px 20px;
                 border: none;
                 background: none;
-                color: var(--azul-claro);
+                color: #434E70;
                 cursor: pointer;
-                border-bottom: 2px solid transparent;
+                border-bottom: 3px solid transparent;
                 transition: all 0.3s;
+                font-family: arial black;
+                font-size: 13px;
+                border-radius: 10px 10px 0 0;
             }
             
             .tab-btn.active {
-                color: var(--azul-escuro);
-                border-bottom-color: var(--azul-original);
+                color: #9bb4ff;
+                border-bottom-color: #9bb4ff;
                 font-weight: bold;
+                background: rgba(155, 180, 255, 0.1);
+            }
+
+            .tab-btn:hover {
+                background: rgba(155, 180, 255, 0.15);
             }
             
             .tab-content {
@@ -163,6 +188,13 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             
             .tab-content.active {
                 display: block;
+            }
+
+            .tab-content h2 {
+                color: #434E70;
+                font-family: arial black;
+                margin-bottom: 20px;
+                font-size: 22px;
             }
             
             .admin-list {
@@ -176,42 +208,51 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 12px;
-                border-bottom: 1px solid var(--cinza-claro);
-                border-radius: 8px;
-                margin-bottom: 8px;
-                background: var(--cinza-claro);
+                padding: 20px;
+                border: none;
+                border-radius: 20px;
+                margin-bottom: 15px;
+                background: white;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                gap: 20px;
             }
             
             .empty-state {
                 text-align: center;
                 padding: 40px;
-                color: var(--azul-claro);
+                color: #434E70;
                 font-style: italic;
+                font-family: arial black;
             }
             
             .item-info {
                 flex: 1;
+                min-width: 0;
             }
             
             .item-title {
                 font-weight: bold;
-                color: var(--azul-escuro);
-                margin-bottom: 4px;
+                color: #434E70;
+                margin-bottom: 8px;
+                font-family: arial black;
+                font-size: 15px;
             }
             
             .item-subtitle {
-                color: var(--azul-claro);
-                font-size: 14px;
+                color: #434E70;
+                font-size: 13px;
+                font-family: arial;
+                line-height: 1.6;
+                margin-bottom: 8px;
             }
             
             .item-status {
-                padding: 4px 8px;
-                border-radius: 12px;
+                padding: 6px 16px;
+                border-radius: 999px;
                 font-size: 12px;
                 font-weight: bold;
-                margin-bottom: 4px;
                 display: inline-block;
+                font-family: arial black;
             }
             
             .status-active {
@@ -231,17 +272,27 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             
             .item-actions {
                 display: flex;
-                gap: 8px;
+                gap: 10px;
                 flex-wrap: wrap;
+                align-items: center;
+                justify-content: flex-end;
             }
             
             .btn-small {
-                padding: 6px 12px;
+                padding: 10px 18px;
                 font-size: 12px;
                 border: none;
-                border-radius: 4px;
+                border-radius: 999px;
                 cursor: pointer;
-                transition: background-color 0.3s;
+                transition: all 0.3s;
+                font-family: arial black;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                white-space: nowrap;
+            }
+
+            .btn-small:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 10px rgba(0,0,0,0.15);
             }
             
             .btn-approve {
@@ -263,19 +314,47 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             }
             
             .btn-view {
-                background-color: var(--azul-original);
+                background-color: #9bb4ff;
                 color: white;
             }
             
             .btn-view:hover {
-                background-color: var(--azul-escuro);
+                background-color: #7a9dff;
+            }
+
+            .btn {
+                background-color: #9bb4ff;
+                color: white;
+                border: none;
+                border-radius: 999px;
+                padding: 12px 24px;
+                font-family: arial black;
+                font-size: 14px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            }
+
+            .btn:hover {
+                background-color: #7a9dff;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            }
+
+            .btn-secondary {
+                background-color: #6c757d;
+            }
+
+            .btn-secondary:hover {
+                background-color: #5a6268;
             }
             
             .report-section {
-                background: var(--cinza-claro);
+                background: white;
                 padding: 20px;
-                border-radius: 8px;
+                border-radius: 20px;
                 margin-bottom: 20px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }
             
             .report-grid {
@@ -286,15 +365,17 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             }
             
             .report-card {
-                background: var(--branco);
-                padding: 15px;
-                border-radius: 8px;
+                background: #CFD2DB;
+                padding: 20px;
+                border-radius: 20px;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             }
             
             .report-card h4 {
-                margin: 0 0 10px 0;
-                color: var(--azul-escuro);
+                margin: 0 0 12px 0;
+                color: #434E70;
+                font-family: arial black;
+                font-size: 16px;
             }
             
             .report-list {
@@ -304,9 +385,11 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
             }
             
             .report-list li {
-                padding: 5px 0;
+                padding: 8px 0;
                 font-size: 14px;
-                color: var(--azul-claro);
+                color: #434E70;
+                font-family: arial;
+                line-height: 1.5;
             }
             
             .actions-row {
@@ -316,18 +399,206 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 flex-wrap: wrap;
                 margin-top: 20px;
             }
+
+            .search-box, 
+            input[type="text"],
+            input[type="email"] {
+                background-color: white;
+                color: #434E70;
+                border: 2px solid #9bb4ff;
+                border-radius: 999px;
+                padding: 12px 20px;
+                font-family: arial black;
+                font-size: 14px;
+                text-align: center;
+                outline: none;
+                box-sizing: border-box;
+                transition: all 0.3s ease;
+            }
+
+            .search-box:focus,
+            input[type="text"]:focus,
+            input[type="email"]:focus {
+                border-color: #7a9dff;
+                box-shadow: 0 0 0 3px rgba(155, 180, 255, 0.2);
+            }
+
+            .admin-form {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+                margin-bottom: 20px;
+                flex-wrap: wrap;
+            }
+
+            .admin-form input {
+                flex: 1;
+                min-width: 200px;
+            }
+
+            .books-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+                gap: 15px;
+                max-height: 500px;
+                overflow-y: auto;
+                padding: 10px;
+            }
+
+            .book-card-admin {
+                background: white;
+                border-radius: 15px;
+                padding: 12px;
+                text-align: center;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            }
+
+            .book-card-admin:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            }
+
+            .book-card-admin img {
+                width: 80px;
+                height: 120px;
+                object-fit: cover;
+                border-radius: 8px;
+                margin-bottom: 8px;
+            }
+
+            .book-title {
+                font-size: 11px;
+                font-weight: bold;
+                color: #434E70;
+                margin-bottom: 4px;
+                line-height: 1.3;
+                overflow: hidden;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                font-family: arial black;
+            }
+
+            .book-author {
+                font-size: 10px;
+                color: #434E70;
+                overflow: hidden;
+                display: -webkit-box;
+                -webkit-line-clamp: 1;
+                -webkit-box-orient: vertical;
+                font-family: arial;
+            }
+
+            .book-status-badge {
+                font-size: 9px;
+                padding: 4px 10px;
+                border-radius: 999px;
+                margin-top: 6px;
+                display: inline-block;
+                font-family: arial black;
+            }
+
+            .book-status-badge.available {
+                background: #d4edda;
+                color: #155724;
+            }
+
+            .book-status-badge.borrowed {
+                background: #f8d7da;
+                color: #721c24;
+            }
+
+            .users-card {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 20px;
+                border: none;
+                margin-bottom: 12px;
+                border-radius: 20px;
+                background: white;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
             
             @media (max-width: 768px) {
+                .admin-container {
+                    padding: 15px;
+                }
+
+                .admin-header h1 {
+                    font-size: 24px;
+                }
+
                 .admin-stats {
                     grid-template-columns: repeat(2, 1fr);
+                    gap: 10px;
+                }
+
+                .stat-card {
+                    padding: 20px 15px;
+                }
+
+                .stat-number {
+                    font-size: 28px;
+                }
+
+                .admin-list li {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    padding: 20px;
+                    gap: 15px;
                 }
                 
                 .item-actions {
+                    width: 100%;
                     flex-direction: column;
                     align-items: stretch;
                 }
+
+                .btn-small {
+                    width: 100%;
+                    padding: 12px;
+                }
+
+                .admin-form {
+                    flex-direction: column;
+                }
+
+                .admin-form input {
+                    width: 100%;
+                }
+
+                .admin-form .btn {
+                    width: 100%;
+                }
+
+                .section-tabs {
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
+                    padding-bottom: 10px;
+                }
+
+                .tab-btn {
+                    white-space: nowrap;
+                    font-size: 12px;
+                    padding: 10px 15px;
+                }
+
+                .books-grid {
+                    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+                    gap: 12px;
+                }
+
+                .users-card {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 10px;
+                }
             }
         </style>
+
 
         <div class="admin-container">
             <div class="admin-header">
@@ -381,7 +652,7 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                 ${aguardandoRetirada.length > 0 ? `
                     <div id="aguardando" class="tab-content active">
                         <h2>Empréstimos Aguardando Retirada</h2>
-                        <p style="color: #856404; padding: 10px; background: #fff3cd; border-radius: 6px; margin-bottom: 15px;">
+                        <p style="color: #856404; padding: 15px; background: #fff3cd; border-radius: 20px; margin-bottom: 15px; text-align: center; font-family: arial black;">
                             📋 Estes usuários solicitaram empréstimos. Confirme quando retirarem o livro.
                         </p>
                         <ul class="admin-list">
@@ -474,17 +745,16 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
 
                 <div id="catalogo" class="tab-content">
                     <h2>Catálogo Completo de Livros</h2>
-                    <input type="text" class="search-box" id="book-search" placeholder="Pesquisar livros..." style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid var(--cinza-escuro); border-radius: 6px;">
-                    <div class="books-grid" id="books-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto; padding: 10px;">
+                    <input type="text" class="search-box" id="book-search" placeholder="Pesquisar livros..." style="width: 100%; margin-bottom: 15px;">
+                    <div class="books-grid" id="books-grid">
                         ${allBooks.map(book => `
-                            <div class="book-card-admin" data-bookid="${book.id}" style="background: var(--cinza-claro); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: transform 0.3s ease;">
+                            <div class="book-card-admin" data-bookid="${book.id}">
                                 <img src="${book.cover || createPlaceholderImage(book.title)}" 
                                     alt="${book.title}"
-                                    style="width: 80px; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;"
                                     onerror="this.src='${createPlaceholderImage('Erro')}'">
-                                <div class="book-title" style="font-size: 11px; font-weight: bold; color: var(--azul-escuro); margin-bottom: 4px; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${book.title || 'Título não disponível'}</div>
-                                <div class="book-author" style="font-size: 10px; color: var(--azul-claro); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;">${book.author || 'Autor desconhecido'}</div>
-                                <span class="book-status-badge ${book.available !== false ? 'available' : 'borrowed'}" style="font-size: 9px; padding: 2px 6px; border-radius: 8px; margin-top: 4px; display: inline-block; ${book.available !== false ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}">
+                                <div class="book-title">${book.title || 'Título não disponível'}</div>
+                                <div class="book-author">${book.author || 'Autor desconhecido'}</div>
+                                <span class="book-status-badge ${book.available !== false ? 'available' : 'borrowed'}">
                                     ${book.available !== false ? 'Disponível' : 'Emprestado'}
                                 </span>
                             </div>
@@ -494,13 +764,13 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
 
                <div id="usuarios" class="tab-content">
                     <h2>Gerenciar Usuários</h2>
-                    <div class="admin-form" style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
-                        <input type="text" id="admin-cpf" placeholder="CPF do usuário" maxlength="14" style="padding: 8px 12px; border: 1px solid var(--cinza-escuro); border-radius: 6px; font-size: 14px;">
+                    <div class="admin-form">
+                        <input type="text" id="admin-cpf" placeholder="CPF do usuário" maxlength="14">
                         <button id="btn-add-admin" class="btn">➕ Promover a Admin</button>
-                        <button id="btn-remove-admin" class="btn btn-secondary" style="background-color: #dc3545;">➖ Remover Admin</button>
+                        <button id="btn-remove-admin" class="btn btn-secondary">➖ Remover Admin</button>
                     </div>
                     <div id="users-list">
-                        <p>Carregando lista de usuários...</p>
+                        <p style="text-align: center; font-family: arial black; color: #434E70;">Carregando lista de usuários...</p>
                     </div>
                 </div>
 
@@ -508,7 +778,7 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
                     <h2>Relatórios e Estatísticas</h2>
                     <button id="btn-load-report" class="btn" style="margin-bottom: 20px;">Gerar Relatório Completo</button>
                     <div id="report-content">
-                        <p style="text-align: center; color: var(--azul-claro);">Clique no botão acima para gerar o relatório</p>
+                        <p style="text-align: center; color: #434E70; font-family: arial black;">Clique no botão acima para gerar o relatório</p>
                     </div>
                 </div>
             </div>
@@ -523,7 +793,6 @@ function renderAdminContent(container, currentUser, dashboardData, allBooks) {
 }
 
 function setupAdminEventListeners(container, allBooks) {
-    // Sistema de abas
     const tabBtns = container.querySelectorAll('.tab-btn');
     const tabContents = container.querySelectorAll('.tab-content');
 
@@ -546,7 +815,6 @@ function setupAdminEventListeners(container, allBooks) {
         });
     });
 
-    // Busca de livros
     const bookSearch = container.querySelector('#book-search');
     const booksGrid = container.querySelector('#books-grid');
 
@@ -568,7 +836,6 @@ function setupAdminEventListeners(container, allBooks) {
         });
     }
 
-    // Click nos livros do catálogo
     container.addEventListener('click', (e) => {
         const bookCard = e.target.closest('.book-card-admin');
         if (bookCard) {
@@ -577,7 +844,6 @@ function setupAdminEventListeners(container, allBooks) {
         }
     });
 
-    // Aprovar devoluções
     container.addEventListener('click', async (e) => {
         if (e.target.classList.contains('btn-approve')) {
             const bookId = e.target.dataset.bookid;
@@ -607,7 +873,6 @@ function setupAdminEventListeners(container, allBooks) {
             }
         }
 
-        // Confirmar retirada
         if (e.target.classList.contains('btn-confirm')) {
             const bookId = e.target.dataset.bookid;
             const cpf = e.target.dataset.cpf;
@@ -615,8 +880,6 @@ function setupAdminEventListeners(container, allBooks) {
             if (!confirm('Confirmar que o usuário retirou o livro?')) return;
 
             try {
-                console.log('Enviando confirmação:', { bookId, cpf });
-                
                 const response = await fetch('http://localhost:3000/api/admin/confirm-pickup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -638,14 +901,12 @@ function setupAdminEventListeners(container, allBooks) {
             }
         }
 
-        // Ver detalhes do livro
         if (e.target.classList.contains('btn-view')) {
             const bookId = e.target.dataset.bookid;
             navigateTo('details', { bookId: parseInt(bookId) });
         }
     });
 
-   // Promover usuário a admin
     const addAdminBtn = container.querySelector('#btn-add-admin');
     const removeAdminBtn = container.querySelector('#btn-remove-admin');
     const cpfInput = container.querySelector('#admin-cpf');
@@ -732,13 +993,12 @@ function setupAdminEventListeners(container, allBooks) {
         });
     }
 
-    // Gerar relatório
     const btnLoadReport = container.querySelector('#btn-load-report');
     const reportContent = container.querySelector('#report-content');
 
     if (btnLoadReport && reportContent) {
         btnLoadReport.addEventListener('click', async () => {
-            reportContent.innerHTML = '<p style="text-align: center;">Carregando relatório...</p>';
+            reportContent.innerHTML = '<p style="text-align: center; font-family: arial black; color: #434E70;">Carregando relatório...</p>';
 
             try {
                 const response = await fetch('http://localhost:3000/api/admin/report', {
@@ -749,22 +1009,21 @@ function setupAdminEventListeners(container, allBooks) {
                     const data = await response.json();
                     renderReport(reportContent, data);
                 } else {
-                    reportContent.innerHTML = '<p style="color: red;">Erro ao carregar relatório</p>';
+                    reportContent.innerHTML = '<p style="color: red; font-family: arial black;">Erro ao carregar relatório</p>';
                 }
             } catch (error) {
                 console.error('Erro ao carregar relatório:', error);
-                reportContent.innerHTML = '<p style="color: red;">Erro de conexão</p>';
+                reportContent.innerHTML = '<p style="color: red; font-family: arial black;">Erro de conexão</p>';
             }
         });
     }
 
-    // Função para carregar lista de usuários
     async function loadUsersList() {
         const usersList = container.querySelector('#users-list');
         if (!usersList) return;
 
         try {
-            usersList.innerHTML = '<p>Carregando usuários...</p>';
+            usersList.innerHTML = '<p style="text-align: center; font-family: arial black; color: #434E70;">Carregando usuários...</p>';
 
             const response = await fetch('http://localhost:3000/api/users', {
                 credentials: 'include'
@@ -774,20 +1033,20 @@ function setupAdminEventListeners(container, allBooks) {
                 const users = await response.json();
                 
                 if (users.length === 0) {
-                    usersList.innerHTML = '<p>Nenhum usuário encontrado.</p>';
+                    usersList.innerHTML = '<p style="text-align: center; font-family: arial black; color: #434E70;">Nenhum usuário encontrado.</p>';
                     return;
                 }
 
                 usersList.innerHTML = `
                     <div style="max-height: 400px; overflow-y: auto;">
                         ${users.map(user => `
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid var(--cinza-claro); background: var(--cinza-claro); margin-bottom: 8px; border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; border: none; margin-bottom: 10px; border-radius: 999px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                                 <div>
-                                    <strong>${user.nome}</strong><br>
-                                    <small>CPF: ${user.cpf} | Email: ${user.email}</small><br>
-                                    <small>Tipo: ${user.tipo} | Livros lidos: ${user.livros_lidos || 0}</small>
+                                    <strong style="font-family: arial black; color: #434E70;">${user.nome}</strong><br>
+                                    <small style="font-family: arial; color: #434E70;">CPF: ${user.cpf} | Email: ${user.email}</small><br>
+                                    <small style="font-family: arial; color: #434E70;">Tipo: ${user.tipo} | Livros lidos: ${user.livros_lidos || 0}</small>
                                 </div>
-                                <span style="padding: 4px 8px; border-radius: 12px; font-size: 12px; background: ${user.tipo === 'admin' ? '#d4edda' : '#cce7ff'}; color: ${user.tipo === 'admin' ? '#155724' : '#004085'};">
+                                <span style="padding: 6px 12px; border-radius: 999px; font-size: 12px; font-family: arial black; background: ${user.tipo === 'admin' ? '#d4edda' : '#cce7ff'}; color: ${user.tipo === 'admin' ? '#155724' : '#004085'};">
                                     ${user.tipo}
                                 </span>
                             </div>
@@ -795,69 +1054,68 @@ function setupAdminEventListeners(container, allBooks) {
                     </div>
                 `;
             } else {
-                usersList.innerHTML = '<p>Erro ao carregar usuários.</p>';
+                usersList.innerHTML = '<p style="text-align: center; font-family: arial black; color: red;">Erro ao carregar usuários.</p>';
             }
         } catch (error) {
             console.error('Erro ao carregar usuários:', error);
-            usersList.innerHTML = '<p>Erro de conexão ao carregar usuários.</p>';
+            usersList.innerHTML = '<p style="text-align: center; font-family: arial black; color: red;">Erro de conexão ao carregar usuários.</p>';
         }
     }
 
-    // Função para renderizar relatório
     function renderReport(reportContent, data) {
         const { stats, topBooks, topUsers, monthlyLoans } = data;
 
         reportContent.innerHTML = `
             <div class="report-section">
-                <h3 style="color: var(--azul-escuro); margin-bottom: 15px;">Estatísticas Gerais</h3>
+                <h3 style="color: #434E70; margin-bottom: 15px; font-family: arial black;">Estatísticas Gerais</h3>
                 <div class="report-grid">
                     <div class="report-card">
                         <h4>Total de Leitores</h4>
-                        <p style="font-size: 24px; font-weight: bold; color: var(--azul-original);">${stats.total_leitores}</p>
+                        <p style="font-size: 24px; font-weight: bold; color: #9bb4ff; font-family: arial black;">${stats.total_leitores}</p>
                     </div>
                     <div class="report-card">
                         <h4>Empréstimos Concluídos</h4>
-                        <p style="font-size: 24px; font-weight: bold; color: #28a745;">${stats.emprestimos_concluidos}</p>
+                        <p style="font-size: 24px; font-weight: bold; color: #28a745; font-family: arial black;">${stats.emprestimos_concluidos}</p>
                     </div>
                     <div class="report-card">
                         <h4>Empréstimos Atrasados</h4>
-                        <p style="font-size: 24px; font-weight: bold; color: #dc3545;">${stats.emprestimos_atrasados}</p>
+                        <p style="font-size: 24px; font-weight: bold; color: #dc3545; font-family: arial black;">${stats.emprestimos_atrasados}</p>
                     </div>
                     <div class="report-card">
                         <h4>Média de Avaliações</h4>
-                        <p style="font-size: 24px; font-weight: bold; color: #ffc107;">${stats.media_avaliacoes ? parseFloat(stats.media_avaliacoes).toFixed(1) + '/5' : 'N/A'}</p>
+                        <p style="font-size: 24px; font-weight: bold; color: #ffc107; font-family: arial black;">${stats.media_avaliacoes ? parseFloat(stats.media_avaliacoes).toFixed(1) + '/5' : 'N/A'}</p>
                     </div>
                 </div>
             </div>
 
             <div class="report-section">
-                <h3 style="color: var(--azul-escuro); margin-bottom: 15px;">Livros Mais Emprestados</h3>
+                <h3 style="color: #434E70; margin-bottom: 15px; font-family: arial black;">Livros Mais Emprestados</h3>
                 <div class="report-card">
                     <ul class="report-list">
                         ${topBooks.map((book, index) => `
-                            <li><strong>${index + 1}.</strong> ${book.title} - ${book.total_emprestimos} empréstimos</li>
+                            <li><strong style="font-family: arial black;">${index + 1}.</strong> ${book.title} - ${book.total_emprestimos} empréstimos</li>
                         `).join('')}
                     </ul>
                 </div>
             </div>
 
             <div class="report-section">
-                <h3 style="color: var(--azul-escuro); margin-bottom: 15px;">Usuários Mais Ativos</h3>
+                <h3 style="color: #434E70; margin-bottom: 15px; font-family: arial black;">Usuários Mais Ativos</h3>
                 <div class="report-card">
                     <ul class="report-list">
                         ${topUsers.map((user, index) => `
-                            <li><strong>${index + 1}.</strong> ${user.nome} - ${user.total_emprestimos} empréstimos | ${user.livros_lidos} livros lidos</li>
+                            <li><strong style="font-family: arial black;">${index + 1}.</strong> ${user.nome} - ${user.total_emprestimos} empréstimos | ${user.livros_lidos} livros lidos</li>
                         `).join('')}
                     </ul>
                 </div>
             </div>
 
             <div class="report-section">
-                <h3 style="color: var(--azul-escuro); margin-bottom: 15px;">Empréstimos por Mês</h3>
+                <h3 style="color: #434E70; margin-bottom: 15px; font-family: arial black;">Empréstimos por Mês</h3>
                 <div class="report-card">
                     <ul class="report-list">
                         ${monthlyLoans.map(month => `
-                            <li><strong>${month.mes}:</strong> ${month.total} empréstimos</li>
+                            <li><strong style="font-family: arial black;">${month.mes}:</strong> ${month.total} empréstimos</li>
                         `).join('')}
                     </ul>
                 </div>
@@ -865,7 +1123,6 @@ function setupAdminEventListeners(container, allBooks) {
         `;
     }
 
-    // Logout
     const logoutBtn = container.querySelector('#btn-logout');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
