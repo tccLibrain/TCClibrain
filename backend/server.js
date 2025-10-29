@@ -25,13 +25,10 @@ app.use(express.static('public'));
 // ✅ Servir imagens
 app.use('/book-covers', express.static(path.join(__dirname, '../public/book-covers')));
 console.log('📂 Servindo imagens de:', path.join(__dirname, '../public/book-covers'));
-
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
-    process.env.NGROK_URL,
-    process.env.FRONTEND_URL,
-    'https://3f996960b654.ngrok-free.app' // Backup caso .env não tenha
+    process.env.FRONTEND_URL
 ].filter(Boolean);
 
 app.use(cors({
@@ -49,19 +46,39 @@ app.use(cors({
     credentials: true
 }));
 
-// ✅ Sessão (configurar uma vez só, DEPOIS do CORS)
+
+const isProduction = process.env.NODE_ENV === 'production';
+
 app.use(session({
     secret: process.env.SESSION_SECRET || 'seu-secret-super-seguro',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true, // ⬅️ true para HTTPS (ngrok)
+        // Secure apenas em produção (HTTPS)
+        secure: isProduction,
+        
+        // httpOnly sempre true (segurança)
         httpOnly: true,
-        sameSite: 'none', // ⬅️ Necessário para CORS com ngrok
-        maxAge: 24 * 60 * 60 * 1000 // 24 horas
-    }
+        
+        // sameSite baseado no ambiente
+        sameSite: isProduction ? 'none' : 'lax',
+        
+        // Tempo de expiração: 24 horas
+        maxAge: 24 * 60 * 60 * 1000
+    },
+    
+    // Nome do cookie
+    name: 'librain.sid',
+    
+    // Salvar sessão mesmo que não modificada
+    rolling: true
 }));
 
+console.log('📝 Configuração de sessão:', {
+    ambiente: isProduction ? 'PRODUÇÃO' : 'DESENVOLVIMENTO (localhost)',
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax'
+});
 // ================================
 // CONFIGURAÇÃO DE EMAIL
 // ================================
@@ -3086,10 +3103,9 @@ app.use((err, req, res, next) => {
 });
 
 createPool().then(() => {
-    app.listen(PORT, '0.0.0.0', () => {  // ⬅️ ADICIONAR '0.0.0.0' AQUI
-        console.log(`Servidor rodando em http://localhost:${PORT}`);
-        console.log('🌐 Acessível via ngrok em: https://3f996960b654.ngrok-free.app');
-        console.log('Rotas disponíveis:');
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
+        console.log('\n📋 Rotas disponíveis:');
         console.log('- Autenticação: /api/login, /api/register, /api/logout');
         console.log('- Livros: /api/books, /api/books/:id');
         console.log('- Empréstimos: /api/loan/request, /api/loan/reserve, /api/loan/request-return');
@@ -3100,8 +3116,9 @@ createPool().then(() => {
         console.log('- Dashboard: /api/user/dashboard');
         console.log('- Perfil: /api/profile');
         console.log('- Teste: /api/test-simple');
+        console.log('\n✅ Servidor pronto para receber requisições!');
     });
 }).catch(err => {
-    console.error('Falha ao iniciar o servidor:', err);
+    console.error('❌ Falha ao iniciar o servidor:', err);
     process.exit(1);
 });
