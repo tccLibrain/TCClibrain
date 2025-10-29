@@ -21,9 +21,12 @@ export default defineConfig({
     })
   ],
   server: {
-    host: true,
+    host: '0.0.0.0',
     port: 5173,
     strictPort: true,
-    allowAllHosts: true // ⚡ garante que qualquer host externo funciona
+    allowedHosts: ['.ngrok-free.app', '.ngrok.io'],
+    hmr: {
+      clientPort: 443
+    }
   }
 });

@@ -10,54 +10,72 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
-
+// ⬅️ IMPORTANTE: Configurar trust proxy ANTES de tudo
+app.set('trust proxy', 1);
 
 // ================================
-// TESTE CRÍTICO DE ROTAS
+// CONFIGURAÇÕES DE MIDDLEWARE
 // ================================
-app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    credentials: true
-}));
 
-console.log('🔍 Registrando rota de teste...');
-
-app.get('/api/test-simple', (req, res) => {
-    console.log('✅ Rota de teste chamada!');
-    res.json({ 
-        status: 'OK', 
-        message: 'Servidor funcionando!',
-        timestamp: new Date().toISOString()
-    });
-});
-
-console.log('✅ Rota de teste registrada');
-
-// ✅ CONFIGURAR IMAGENS - APENAS UMA VEZ
-app.use('/book-covers', express.static(path.join(__dirname, '../public/book-covers')));
-console.log('📂 Servindo imagens de:', path.join(__dirname, '../public/book-covers'));
-
-// DEPOIS vêm as outras configurações
+// ✅ Body parser (uma vez só)
 app.use(express.json({ limit: 'Infinity' }));
 app.use(express.urlencoded({ limit: 'Infinity', extended: true }));
 app.use(express.static('public'));
 
+// ✅ Servir imagens
+app.use('/book-covers', express.static(path.join(__dirname, '../public/book-covers')));
+console.log('📂 Servindo imagens de:', path.join(__dirname, '../public/book-covers'));
 
-// Configurar transportador de email
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    process.env.NGROK_URL,
+    process.env.FRONTEND_URL,
+    'https://3f996960b654.ngrok-free.app' // Backup caso .env não tenha
+].filter(Boolean);
+
+app.use(cors({
+    origin: function(origin, callback) {
+        // Permitir requisições sem origin (Postman, curl, etc)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log('❌ Origin bloqueado:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true
+}));
+
+// ✅ Sessão (configurar uma vez só, DEPOIS do CORS)
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'seu-secret-super-seguro',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: true, // ⬅️ true para HTTPS (ngrok)
+        httpOnly: true,
+        sameSite: 'none', // ⬅️ Necessário para CORS com ngrok
+        maxAge: 24 * 60 * 60 * 1000 // 24 horas
+    }
+}));
+
+// ================================
+// CONFIGURAÇÃO DE EMAIL
+// ================================
+
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false, // true para 465, false para outras portas
+    secure: false,
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     }
 });
 
-// Verificar configuração do email ao iniciar
 transporter.verify(function(error, success) {
     if (error) {
         console.error('❌ Erro na configuração do email:', error);
@@ -67,7 +85,6 @@ transporter.verify(function(error, success) {
     }
 });
 
-// Função auxiliar para enviar email
 async function enviarEmail(destinatario, assunto, html) {
     try {
         const info = await transporter.sendMail({
@@ -86,46 +103,10 @@ async function enviarEmail(destinatario, assunto, html) {
     }
 }
 
-// SEM LIMITE de tamanho no body
-app.use(express.json({ limit: 'Infinity' }));
-app.use(express.urlencoded({ limit: 'Infinity', extended: true }));
+// ================================
+// CONFIGURAÇÃO DO BANCO DE DADOS
+// ================================
 
-app.use(express.static('public'));
-
-// Configuração do CORS para permitir que o frontend envie cookies de sessão
-const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    process.env.FRONTEND_URL
-].filter(Boolean);
-
-app.use(cors({
-    origin: function(origin, callback) {
-        // Permitir requisições sem origin (como mobile apps ou curl)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true
-}));
-
-// Configuração de sessão
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'seu-secret-super-seguro',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: false, // true apenas em HTTPS
-        httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 // 24 horas
-    }
-}));
-
-// Configuração do banco de dados LOCAL
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT) || 3306,
@@ -133,7 +114,6 @@ const dbConfig = {
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_DATABASE || 'librain'
 };
-
 
 
 // Cria um pool de conexões para melhor desempenho
@@ -220,6 +200,35 @@ const cleanCPF = (cpf) => {
     if (!cpf) return null;
     return cpf.toString().replace(/[^\d]/g, '');
 };
+
+app.get('/', (req, res) => {
+    res.json({
+        message: '🚀 LibRain API está online!',
+        version: '1.0.0',
+        status: 'OK',
+        timestamp: new Date().toISOString(),
+        endpoints: {
+            test: '/api/test-simple',
+            books: '/api/books',
+            login: '/api/login',
+            register: '/api/register',
+            docs: 'https://github.com/seu-usuario/librain'
+        }
+    });
+});
+
+console.log('🔍 Registrando rota de teste...');
+
+app.get('/api/test-simple', (req, res) => {
+    console.log('✅ Rota de teste chamada!');
+    res.json({ 
+        status: 'OK', 
+        message: 'Servidor funcionando!',
+        timestamp: new Date().toISOString()
+    });
+});
+
+console.log('✅ Rota de teste registrada');
 
 // ================================
 // ROTAS DE AUTENTICAÇÃO
@@ -3077,8 +3086,9 @@ app.use((err, req, res, next) => {
 });
 
 createPool().then(() => {
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {  // ⬅️ ADICIONAR '0.0.0.0' AQUI
         console.log(`Servidor rodando em http://localhost:${PORT}`);
+        console.log('🌐 Acessível via ngrok em: https://3f996960b654.ngrok-free.app');
         console.log('Rotas disponíveis:');
         console.log('- Autenticação: /api/login, /api/register, /api/logout');
         console.log('- Livros: /api/books, /api/books/:id');
@@ -3089,6 +3099,7 @@ createPool().then(() => {
         console.log('- Admin: /api/admin/*');
         console.log('- Dashboard: /api/user/dashboard');
         console.log('- Perfil: /api/profile');
+        console.log('- Teste: /api/test-simple');
     });
 }).catch(err => {
     console.error('Falha ao iniciar o servidor:', err);
